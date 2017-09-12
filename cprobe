@@ -124,9 +124,9 @@ print_help() {
 cat <<EOF
 probe C/C++ compiler
 
-usage: $script_name [options]
+usage: $script_name [cmd] [options]
 
-options:
+ cmd                   optional compiler command
  -c++                  enable C++ mode
  -type                 get compiler type
  -ver                  get compiler version
@@ -146,7 +146,6 @@ options:
  -f3                   print in format VALUE
  -f4                   print in format TYPE:OS:ARCH:CMD
  -f5                   print in format TYPE:VER:STD:OS:OSVER:ARCH:BITS:ENDIAN:DM:CROSS:POSIX:SUS:CMD
- CMD=<cmd>             specify compiler command
  FLAGS=<flags>         specify compiler flags
  -help-props           print a detailed list of compiler properties
  -v|-version           print version
@@ -1366,6 +1365,7 @@ clean_exit() {
   exit $exit_status
 }
 
+param1=1
 while test $# -gt 0; do
   case "$1" in
     -h|-help|--help)
@@ -1383,9 +1383,6 @@ while test $# -gt 0; do
     -c++)
       lang_mode=c++
       c_ext="cpp"
-      ;;
-    CMD=*)
-      CC=`echo "$1" | sed 's/^[^=]*=//' | sed 's/^ *//' | sed 's/ *$//'`
       ;;
     FLAGS=*)
       CFLAGS=`echo "$1" | sed 's/^[^=]*=//' | sed 's/^ *//' | sed 's/ *$//'`
@@ -1433,11 +1430,16 @@ while test $# -gt 0; do
       out_format=`echo "$1" | sed 's/^-f//'`
       ;;
     *)
-      printf "%s\n" "$script_name: invalid parameter $1" >&2
-      clean_exit 1
+      if test x$param1 = x1; then
+        CC=$1
+      else
+        printf "%s\n" "$script_name: invalid parameter $1" >&2
+        clean_exit 1
+      fi
       ;;
   esac
   shift
+  param1=
 done
 
 rm -rf $test_dir 2>/dev/null
