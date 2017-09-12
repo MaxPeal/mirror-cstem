@@ -1,0 +1,254 @@
+#!/bin/sh
+#
+# cfront
+#
+# Copyright (c) 2015-2017, Oleksiy Chernyavskyy
+# All rights reserved.
+# 
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 
+# 1. Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+# 
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+################################################################################
+# JUMP TO MODERN SHELL IF POSSIBLE
+(test_exit_code_127_sdfjsdfksjdhfksjdhf  >/dev/null) 2>/dev/null
+if test $? -ne 127; then
+  if test -z "$CFRONT_BASH_REDIRECT"; then
+    CFRONT_BASH_REDIRECTED=1
+    export CFRONT_BASH_REDIRECTED
+    if test -x /bin/bash; then
+      exec /bin/bash "$0" ${1+"$@"}
+    elif test -x /usr/bin/bash; then
+      exec /usr/bin/bash "$0" ${1+"$@"}
+    elif test -x /usr/local/bin/bash; then
+      exec /usr/local/bin/bash "$0" ${1+"$@"}
+    elif test -x /usr/pkg/bin/bash; then
+      exec /usr/pkg/bin/bash "$0" ${1+"$@"}
+    else
+      (bash -c "pwd" >/dev/null) 2>/dev/null
+      if test $? -eq 0; then
+        exec bash "$0" ${1+"$@"}
+      fi
+    fi
+  fi
+fi
+CFRONT_BASH_REDIRECTED=
+export CFRONT_BASH_REDIRECTED
+################################################################################
+
+
+version_string="cfront 1.0"
+
+script_name=`basename "$0"`
+script_options="$@"
+script_dir=`dirname "$0"`
+
+
+print_help() {
+  cat <<EOF
+C/C++ compiler frontend
+
+$script_name <compiler> <options>
+
+Compilers:
+  gcc
+  clang
+  mingw
+  xlc
+
+The following options will be translated to the versions corresponding the provided compiler.
+  -c           compile only sources
+  -o <file>    output file
+  *.c          source files
+  *.o|*.obj    object files
+  -print       print the compilation commands, but do not execute them
+  -mk          generate Make rules
+  CC=<cmd>     compiler command
+EOF
+}
+
+print_version() {
+  echo "$version_string"
+}
+
+
+if test $# -eq 0; then
+  echo "$script_name: error: no parameters specified" >&2
+  exit 1
+fi
+
+case "$1" in
+  -h|-help|--help)
+    print_help
+    exit 0
+    ;;
+  -v)
+    print_version
+    exit 0
+    ;;
+  gcc)
+    op_type=gcc
+    cc_cmd=gcc
+    obj_ext=o
+    exe_ext=
+    def_exe_out="a.out"
+    ;;
+  clang)
+    op_type=clang
+    cc_cmd=clang
+    obj_ext=o
+    exe_ext=
+    def_exe_out="a.out"
+    ;;
+  mingw)
+    op_type=mingw
+    cc_cmd=mingw
+    obj_ext=obj
+    exe_ext=".exe"
+    def_exe_out="a.out.exe"
+    ;;
+  xlc)
+    op_type=xlc
+    cc_cmd=xlc
+    obj_ext=o
+    exe_ext=
+    def_exe_out="a.out"
+    ;;
+  *)
+    echo "$script_name: error: invalid compiler type $1" >&2
+    exit 1
+    ;;
+esac
+shift
+
+current_opt=
+op_compile=
+op_outfile=
+op_src=
+op_obj=
+src_multi=
+op_print=
+op_mk=
+cflags=
+ldflags=
+cc_obj=
+while test $# -gt 0; do
+  case "$1" in
+    -c)
+      op_compile=1
+      current_opt=
+      cflags="$cflags -c"
+      ;;
+    -o)
+      current_opt=o
+#      shift
+#      if
+      ;;
+    *.c)
+      if test -n "$op_src"; then
+        src_multi=1
+      fi
+      op_src="$op_src $1"
+      current_opt=
+      ;;
+    *.[oO]|*.[oO][bB][jJ])
+      op_obj="$op_obj $1"
+      current_opt=
+      ;;
+    CC=*)
+      cc_cmd=`echo "$1" | sed 's/^[^=]*=//'`
+      current_opt=
+      ;;
+    -print)
+      op_print=1
+      current_opt=
+      ;;
+    -mk)
+      op_mk=1
+      current_opt=
+      ;;
+    *)
+      case "$current_opt" in
+        o)
+          op_outfile=$1
+          cflags="$cflags -o $1"
+          ldflags="$ldflags -o $1"
+          current_opt=
+          ;;
+        *)
+          cflags="$cflags $1"
+          ldflags="$ldflags $1"
+          ;;
+      esac
+      ;;
+  esac
+  shift
+done
+
+
+if test -n "$op_src"; then
+  echo "DEBUG: src_multi = '$src_multi'"
+  echo "DEBUG: op_outfile = '$op_outfile'"
+  if test x$src_multi = x1 && test x$op_compile = x1 && test -n "$op_outfile"; then
+    echo "$script_name: error: cannot specify -o with -c with multiple files" >&2
+    exit 1
+  fi
+  for src in $op_src; do
+    if test x$op_print = x1; then
+      echo "$cc_cmd $cflags $src"
+    elif test x$op_mk = x1; then
+      if test -n "$op_outfile" && test x$op_compile = x1; then
+        outfile=$op_outfile
+      else
+        outfile=`basename "$file" | sed 's/\.[^.]*$//'`
+        outfile="${outfile}.$obj_ext"
+      fi
+      cc_obj="$cc_obj $outfile"
+      cat <<EOF
+$outfile: $src
+	$cc_cmd $cflags $src
+EOF
+    else
+      $cc_cmd $cflags $src
+    fi
+  done
+fi
+
+if test x$op_compile = x; then
+  if test -z "$op_obj" && test -z "$cc_obj"; then
+    echo "$script_name: error: no input files" >&2
+    exit 1
+  fi
+
+  if test x$op_print = x1; then
+    echo "$cc_cmd $ldflags $op_obj $cc_obj"
+  elif test x$op_mk = x1; then
+    if test -z "$op_outfile"; then
+      outfile=$def_exe_out
+      ldflags="$ldflags -o $outfile"
+    fi
+    cat <<EOF
+$outfile: $op_obj $cc_obj
+	$cc_cmd $ldflags $op_obj $cc_obj
+EOF
+  else
+    $cc_cmd $ldflags $op_obj $cc_obj
+  fi
+fi
+
