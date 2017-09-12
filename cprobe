@@ -104,7 +104,7 @@ abs_path() {
   fi
 }
 
-version_string="1.1"
+version_string="1.2"
 script_name=`basename "$0"`
 orig_dir=`pwd`
 abs_path $0
@@ -128,7 +128,7 @@ usage: $script_name [options]
 
 options:
  -c++                  enable C++ mode
- -id                   get compiler id
+ -type                 get compiler type
  -ver                  get compiler version
  -cmd                  get compiler command
  -std                  get language standard
@@ -141,9 +141,11 @@ options:
  -cross                print 'true' and return 0 if compiler is cross-compiler
  -posix                get POSIX support version
  -sus                  get SUS support version
- -f1                   print in format 1> VAR="VALUE"
- -f2                   print in format 2> FIELD: VALUE
- -f3                   print in format 3> VALUE
+ -f1                   print in format VAR="VALUE"
+ -f2                   print in format FIELD: VALUE
+ -f3                   print in format VALUE
+ -f4                   print in format TYPE:OS:ARCH:CMD
+ -f5                   print in format TYPE:VER:STD:OS:OSVER:ARCH:BITS:ENDIAN:DM:CROSS:POSIX:SUS:CMD
  CMD=<cmd>             specify compiler command
  FLAGS=<flags>         specify compiler flags
  -help-props           print a detailed list of compiler properties
@@ -153,7 +155,7 @@ EOF
 
 print_help_props() {
 cat <<EOF
-COMPILERS
+COMPILER TYPES
 --------------------------------------------------------------------------------
 armc              ARM Compiler (by ARM)
 clang             Clang
@@ -264,7 +266,7 @@ check_cc() {
   check_cc_found=
   check_cpp_ok=
   check_cc_ok=
-  cmd_id=
+  cmd_type=
   cc_is_cross=1
   c_flag="-c"
   o_obj_flag="-o"
@@ -282,7 +284,7 @@ check_cc() {
   case "$cc_cmd_base" in
     gcc*|g++*|clang*)
       CPP_FLAG=-E
-      cmd_id=gcc
+      cmd_type=gcc
       ;;
     *)
       cc_cmd0=`echo "$cc_cmd_base" | sed 's# .*##'`
@@ -293,23 +295,23 @@ check_cc() {
       ($cc_cmd0 -h 2>&1 | grep -i texas >/dev/null) 2>/dev/null
       if test $? -eq 0; then
         CPP_FLAG=-ppl
-        cmd_id=ticc
+        cmd_type=ticc
       fi
-      if test -z "$cmd_id"; then
+      if test -z "$cmd_type"; then
         ($cc_cmd0 2>&1 | grep -i microsoft >/dev/null) 2>/dev/null
         if test $? -eq 0; then
           CPP_FLAG="/E"
           c_flag="/c"
           o_obj_flag="/Fo:"
           o_exe_flag="/Fe:"
-          cmd_id=msc
+          cmd_type=msc
           exe_ext=".exe"
           obj_ext="obj"
         fi
       fi
-      if test -z "$cmd_id"; then
+      if test -z "$cmd_type"; then
         CPP_FLAG=-E
-        cmd_id=gcc
+        cmd_type=gcc
       fi
       ;;
   esac
@@ -331,7 +333,7 @@ int cpp_result = CPP_OK;
 
 EOF
 
-  if test $cmd_id = ticc; then
+  if test $cmd_type = ticc; then
     rm -f $test_pp
     ($prop_cmd $prop_cflags $CPP_FLAG $test_src >/dev/null) 2>/dev/null
     ret_code=$?
@@ -437,7 +439,7 @@ load_cc_macros() {
     cat $headers >$probe_h
   fi
   cat $script_abs | sed -n -e '/\* COMPILER DEFINES \*/,$p' | grep -v "^EOF" >> $probe_h
-  if test $cmd_id = ticc; then
+  if test $cmd_type = ticc; then
     $prop_cmd $CFLAGS $CPP_FLAG $probe_h 2>/dev/null
     cat $probe_pp > $probe_h_out
   else
@@ -450,7 +452,7 @@ load_cc_macros() {
 }
 
 read_cc_props_base() {
-  prop_id=
+  prop_type=
   prop_version=
 
   load_cc_macros
@@ -459,7 +461,7 @@ read_cc_props_base() {
 # DETECT COMPILER AND VERSION
 
   if test -n "$DSET__CC_ARM"; then
-    prop_id=armc
+    prop_type=armc
 
     if test -n "$DVAL__ARMCC_VERSION"; then
       prop_vmajor=`expr "0$DVAL__ARMCC_VERSION" / 100000`
@@ -471,7 +473,7 @@ read_cc_props_base() {
   fi
 
   if test -n "$DSET__clang__"; then
-    prop_id=clang
+    prop_type=clang
 
     prop_vmajor=$DVAL__clang_major__
     prop_vminor=$DVAL__clang_minor__
@@ -479,16 +481,16 @@ read_cc_props_base() {
   fi
 
   if test -n "$DSET__COMPCERT__"; then
-    prop_id=compcert
+    prop_type=compcert
   fi
 
   if test $lang_mode = "c++"; then
     if test -n "$DSET__HP_cc"; then
-      prop_id=hpansic
+      prop_type=hpansic
     fi
   else
     if test -n "$DSET__HP_aCC"; then
-      prop_id=hpacc
+      prop_type=hpacc
 
       if test -n "$DVAL__HP_aCC"; then
         if test "x$DVAL__HP_aCC" = "x1"; then
@@ -504,7 +506,7 @@ read_cc_props_base() {
   fi
 
   if test -n "$DSET__IBMC__" || test -n "$DVAL__IBMCPP__"; then
-    prop_id=xlc
+    prop_type=xlc
 
     if test -n "$DSET__COMPILER_VER__"; then
       tbuf=`echo "$DVAL__COMPILER_VER__" | sed 's/0[xX].\(.\).*/\1/g'`
@@ -539,7 +541,7 @@ read_cc_props_base() {
   fi
 
   if test -n "$DSET__INTEL_COMPILER" || test -n "$DSET__ICC" || test -n "$DSET__ECC" || test -n "$DSET__ICL"; then
-    prop_id=intel
+    prop_type=intel
 
     if test -n "$DVAL__INTEL_COMPILER"; then
       prop_vmajor=`expr "0$DVAL__INTEL_COMPILER" / 100`
@@ -550,7 +552,7 @@ read_cc_props_base() {
   fi
 
   if test -n "$DSET_MSC_VER"; then
-    prop_id=msc
+    prop_type=msc
 
     if test -n "$DVAL_MSC_VER"; then
       prop_vmajor=`expr "0$DVAL_MSC_VER" / 100`
@@ -563,7 +565,7 @@ read_cc_props_base() {
   fi
 
   if test -n "$DSET__SUNPRO_C" || test -n "$DSET__SUNPRO_CC"; then
-    prop_id=sunpro
+    prop_type=sunpro
 
     version_string=${DVAL__SUNPRO_C:-$DVAL__SUNPRO_CC}
     version_string=`echo "$version_string" | sed 's/ *//g'`
@@ -583,7 +585,7 @@ read_cc_props_base() {
   fi
 
   if test -n "$DSET__PGI"; then
-    prop_id=pgi
+    prop_type=pgi
 
     prop_vmajor=$DVAL__PGIC__
     prop_vminor=$DVAL__PGIC_MINOR__
@@ -591,7 +593,7 @@ read_cc_props_base() {
   fi
 
   if test -n "$DSETSDCC"; then
-    prop_id=sdcc
+    prop_type=sdcc
 
     if test -n "$DVALSDCC"; then
       prop_vmajor=`expr "0$DVALSDCC" / 100`
@@ -602,7 +604,7 @@ read_cc_props_base() {
   fi
 
   if test -n "$DSET__TI_COMPILER_VERSION__"; then
-    prop_id=ticc
+    prop_type=ticc
 
     if test -n "$DVAL__TI_COMPILER_VERSION__"; then
       prop_vmajor=`expr "0$DVAL__TI_COMPILER_VERSION__" / 1000000`
@@ -613,11 +615,11 @@ read_cc_props_base() {
   fi
 
   if test -n "$DSET__TINYC__"; then
-    prop_id=tinyc
+    prop_type=tinyc
   fi
 
   if test -n "$DSET__WATCOMC__"; then
-    prop_id=watcom
+    prop_type=watcom
 
     if test -n "$DVAL__WATCOMC__"; then
       prop_vmajor=`expr "0$DVAL__WATCOMC__" / 100`
@@ -625,8 +627,8 @@ read_cc_props_base() {
     fi
   fi
 
-  if test -z "$prop_id" && (test -n "$DSET__GNUC__" || test -n "$DSET__GNUG__"); then
-    prop_id=gcc
+  if test -z "$prop_type" && (test -n "$DSET__GNUC__" || test -n "$DSET__GNUG__"); then
+    prop_type=gcc
 
     if test -n "$DVAL__GNUC_VERSION__"; then
       prop_vmajor=`expr "0$DVAL__GNUC_VERSION__" / 10000`
@@ -641,7 +643,7 @@ read_cc_props_base() {
   elif test -n "$DSET__sgi" || test -n "$DSETsgi"; then
     version_string=${DVAL_SGI_COMPILER_VERSION:-$DVAL_COMPILER_VERSION}
     if test -n "$version_string"; then
-      prop_id=mipspro
+      prop_type=mipspro
       prop_vmajor=`expr "0$version_string" / 100`
       tbuf=`expr "0$version_string" % 100`
       prop_vminor=`expr "0$tbuf" / 10`
@@ -1388,8 +1390,8 @@ while test $# -gt 0; do
     FLAGS=*)
       CFLAGS=`echo "$1" | sed 's/^[^=]*=//' | sed 's/^ *//' | sed 's/ *$//'`
       ;;
-    -id)
-      print_string="$print_string id"
+    -type)
+      print_string="$print_string type"
       ;;
     -ver)
       print_string="$print_string version"
@@ -1427,7 +1429,7 @@ while test $# -gt 0; do
     -sus)
       print_string="$print_string sus"
       ;;
-    -f1|-f2|-f3)
+    -f1|-f2|-f3|-f4|-f5)
       out_format=`echo "$1" | sed 's/^-f//'`
       ;;
     *)
@@ -1452,10 +1454,9 @@ fi
 
 if test -z "$print_string" && test -z "$out_format"; then
   cat <<EOF
-id:                 ${prop_id:--}
+type:               ${prop_type:--}
 version:            ${prop_version:--}
 command:            ${prop_cmd:--}
-cflags:             ${prop_cflags:--}
 language standard:  ${prop_std:--}
 target os:          ${prop_os:--}
 target os version:  ${prop_os_version:--}
@@ -1467,9 +1468,13 @@ cross compiler:     $prop_flag_cross
 posix version:      ${prop_posix:--}
 sus version:        ${prop_sus:--}
 EOF
+elif test x$out_format = x4; then
+  printf "%s\n" "$prop_type:$prop_os:$prop_arch:$prop_cmd"
+elif test x$out_format = x5; then
+  printf "%s\n" "$prop_type:$prop_version:$prop_std:$prop_os:$prop_os_version:$prop_arch:$prop_bitness:$prop_endianess:$prop_data_model:$prop_flag_cross:$prop_posix:$prop_sus:$prop_cmd"
 else
   if test -z "$print_string"; then
-    print_string="cmd cflags id version std os os_version arch bitness endianness data_model flag_cross posix sus"
+    print_string="cmd type version std os os_version arch bitness endianness data_model flag_cross posix sus"
   fi
   print_space=
   for prop in $print_string; do
