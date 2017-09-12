@@ -146,9 +146,9 @@ usage: $script_name [cmd] [options]
  -f3                   print in format VALUE
  -f4                   print in format TYPE:OS:ARCH:CMD
  -f5                   print in format TYPE:VER:STD:OS:OSVER:ARCH:BITS:ENDIAN:DM:CROSS:POSIX:SUS:CMD
- FLAGS=<flags>         specify compiler flags
- -help-props           print a detailed list of compiler properties
- -v|-version           print version
+ -help-props           print a detailed list of predefined compiler properties
+ -v                    print $script_name version
+ ...                   unrecognized parameters are forwarded as compiler flags
 EOF
 }
 
@@ -1376,16 +1376,13 @@ while test $# -gt 0; do
       print_help_props
       exit 0
       ;;
-    -v|-version)
+    -v)
       print_version
       exit 0
       ;;
     -c++)
       lang_mode=c++
       c_ext="cpp"
-      ;;
-    FLAGS=*)
-      CFLAGS=`echo "$1" | sed 's/^[^=]*=//' | sed 's/^ *//' | sed 's/ *$//'`
       ;;
     -type)
       print_string="$print_string type"
@@ -1429,12 +1426,14 @@ while test $# -gt 0; do
     -f1|-f2|-f3|-f4|-f5)
       out_format=`echo "$1" | sed 's/^-f//'`
       ;;
+    -*)
+      CFLAGS="$CFLAGS $1"
+      ;;
     *)
       if test x$param1 = x1; then
         CC=$1
       else
-        printf "%s\n" "$script_name: invalid parameter $1" >&2
-        clean_exit 1
+        CFLAGS="$CFLAGS $1"
       fi
       ;;
   esac
