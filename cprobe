@@ -122,7 +122,7 @@ CFLAGS=
 
 print_help() {
 cat <<EOF
-probe C/C++ compiler
+Probe C/C++ compiler
 
 Usage: $script_name [cmd] [options]
 
