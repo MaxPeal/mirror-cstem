@@ -127,7 +127,7 @@ probe C/C++ compiler
 Usage: $script_name [cmd] [options]
 
 Options:
- cmd       optional 1st parm specifies compiler command
+ cmd       optional 1st parameter specifies compiler command
  -c++      enable C++ mode
  -type     get compiler type
  -ver      get compiler version
