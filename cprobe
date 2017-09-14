@@ -124,31 +124,32 @@ print_help() {
 cat <<EOF
 probe C/C++ compiler
 
-usage: $script_name [cmd] [options]
+Usage: $script_name [cmd] [options]
 
- cmd                   optional compiler command
- -c++                  enable C++ mode
- -type                 get compiler type
- -ver                  get compiler version
- -cmd                  get compiler command
- -std                  get language standard
- -os                   get target OS
- -osver                get target OS version
- -arch                 get target architecture
- -bits                 get target bitness
- -endian               get target endianness
- -dm                   get target data model
- -cross                print 'true' and return 0 if compiler is cross-compiler
- -posix                get POSIX support version
- -sus                  get SUS support version
- -f1                   print in format VAR="VALUE"
- -f2                   print in format FIELD: VALUE
- -f3                   print in format VALUE
- -f4                   print in format TYPE:OS:ARCH:CMD
- -f5                   print in format TYPE:VER:STD:OS:OSVER:ARCH:BITS:ENDIAN:DM:CROSS:POSIX:SUS:CMD
- -help-props           print a detailed list of predefined compiler properties
- -v                    print $script_name version
- ...                   unrecognized parameters are forwarded as compiler flags
+Options:
+ cmd       optional 1st parm specifies compiler command
+ -c++      enable C++ mode
+ -type     get compiler type
+ -ver      get compiler version
+ -cmd      get compiler command
+ -std      get language standard
+ -os       get target OS
+ -osver    get target OS version
+ -arch     get target architecture
+ -bits     get target bitness
+ -endian   get target endianness
+ -dm       get target data model
+ -cross    print 'true' and return 0 if compiler is cross-compiler
+ -posix    get POSIX support version
+ -sus      get SUS support version
+ -f1       print in format VAR="VALUE"
+ -f2       print in format FIELD: VALUE
+ -f3       print in format VALUE
+ -f4       print in format TYPE:OS:ARCH:CMD
+ -f5       print in format TYPE:VER:STD:OS:OSVER:ARCH:BITS:ENDIAN:DM:CROSS:POSIX:SUS:CMD
+ -hprops   print a detailed list of predefined compiler properties
+ -v        print $script_name version
+ ...       unrecognized parameters are forwarded as compiler flags
 EOF
 }
 
@@ -1372,7 +1373,7 @@ while test $# -gt 0; do
       print_help
       exit 0
       ;;
-    -help-props)
+    -hprops)
       print_help_props
       exit 0
       ;;
