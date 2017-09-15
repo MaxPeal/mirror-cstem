@@ -90,7 +90,6 @@ Options:
  -cflags=<flags>       compiler flags
  -ldflags=<flags>      linker flags
  -cctype=<type>        compiler type: gcc clang mingw ticc msc
- -c++                  C++ mode
  -n                    no echo
  -f                    echo only on fail
  -out=<file>           for every subtest generate status variable and write it to a FILE
@@ -325,10 +324,6 @@ while test $# -gt 0; do
     -cctype=*)
       op_cctype=`echo "$1" | sed 's/^[^=]*=//'`
       ;;
-    -c++)
-      lang_mode=c++
-      c_ext="cpp"
-      ;;
     -n)
       op_no_echo=1
       op_echo_fail=
@@ -385,6 +380,10 @@ if test -n "$op_def_out"; then
   if echo "$op_def_out" | grep "^/" > /dev/null; then : ; else
     op_def_out="$orig_dir/$op_def_out"
   fi
+fi
+
+if test $lang_mode = "c++"; then
+  c_ext="cpp"
 fi
 
 if test -z "$op_cmd"; then
