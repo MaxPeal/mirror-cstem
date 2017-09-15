@@ -52,85 +52,25 @@ CPPDEF_BASH_REDIRECTED=
 export CPPDEF_BASH_REDIRECTED
 ################################################################################
 
-
-abs_path() {
-  _sub_orig_dir=`pwd`
-  if test $# = 0; then
-    abs_path_ret=
-    return
-  fi
-  if test $# = 2; then
-    _arg_orig_dir=$1
-    _arg=$2
-    if echo "$_arg" | grep "^/" > /dev/null; then
-      :
-    else
-      _arg=`echo "$_arg_orig_dir/$_arg" | sed 's!//*!/!g'`
-    fi
-  else
-    _arg=$1
-  fi
-  if test -e "$_arg"; then
-    if test -d $_arg; then
-      _file=
-    else
-      _file=`basename "$_arg"`
-      _arg=`dirname "$_arg"`
-    fi
-
-    cd $_cd_param $_arg
-    abs_path_ret=`pwd`
-    if test x"$_file" != "x"; then
-      abs_path_ret="$abs_path_ret/$_file"
-    fi
-
-    cd $_cd_param $_sub_orig_dir
-  else
-    if echo "$_arg" | grep "^/" > /dev/null; then
-      abs_path_ret="$_arg"
-    else
-      abs_path_ret="$_sub_orig_dir/$_arg"
-    fi
-    abs_path_ret=`echo "$abs_path_ret" | sed 's#//*#/#g'`
-    abs_path_ret=`echo "$abs_path_ret" | sed 's#/*$#/#'`
-    string_prev=
-    while test "x$abs_path_ret" != "x$string_prev" ; do
-      string_prev=$abs_path_ret
-      abs_path_ret=`echo "$abs_path_ret" | sed 's#/[^/][^/][^/][^/]*/\.\./#/#g' | sed 's#/[^/][^/.]/\.\./#/#g' | sed 's#/[^/.][^/]/\.\./#/#g' | sed 's#/[^/.]/\.\./#/#g'`
-      abs_path_ret=`echo "$abs_path_ret" | sed 's#^/\.\./#/#' | sed 's#^/\.\.$#/#'`
-      abs_path_ret=`echo "$abs_path_ret" | sed 's#/\./#/#g' | sed 's#/\.$#/#'`
-    done
-    abs_path_ret=`echo "$abs_path_ret" | sed 's#/$##' | sed 's#^$#/#'`
-  fi
-}
-
 script_name=`basename "$0"`
-orig_dir=`pwd`
-abs_path $0
-script_abs=$abs_path_ret
-script_dir=`dirname "$script_abs"`
-lang_mode=c
 test_dir=/tmp/cppdef_$$
-version_string="0.8"
+version_string="0.9"
 c_ext="c"
-CC=
-CFLAGS=
 
 print_help() {
 cat <<EOF
-read CPP defines
+Read CPP defines
 
-usage: $script_name [options] <defines>...
+Usage: $script_name [options] <defines>...
 
-options:
- -c++                  enable C++ mode
- *.h|*.H|*.hpp         include header files. Other file extensions are recognized
- CMD=<cmd>             specify compiler command
- FLAGS=<flags>         specify compiler flags
- INC=<files>           include header files
- <defines>..           list of preprocessor defines to read
- -v|-version           print version
- standard CPP flags are accepted: -I -D
+Options:
+ -cmd=<cmd>            specify compiler command
+ -cctype=<type>        compiler type: gcc clang mingw ticc msc
+ *.h|*.H|*.hpp         header files. Other file extensions are recognized
+ -inc=<list>           header files
+ -v                    print version
+ -*                    compiler flags
+ <defines>..           preprocessor defines to read
 EOF
 }
 
@@ -138,120 +78,46 @@ print_version() {
   echo "cppdef $version_string"
 }
 
-probe_cc() {
-  cprobe_flags=
-  if test $lang_mode = "c++"; then
-    xprobe="cprobe -c++"
-    CX_LANG="C++"
-    cprobe_flags="-c++"
-  else
-    xprobe=cprobe
-    CX_LANG="C"
-  fi
-  
-  ($xprobe -h >/dev/null) 2>/dev/null
-  if test $? -eq 0; then
-    CPROBE=$xprobe
-  elif test -f $script_dir/$xprobe; then
-      CPROBE=$script_dir/$xprobe
-  else
-    echo "$script_name: error: cprobe not found" >&2
-    clean_exit 1
-  fi
-
-  test -n "$CC" && cprobe_flags="$cprobe_flags CMD=\"$CC\""
-
-  CC_CMD=
-  cprobe_out="/tmp/cprobe_out_$$.sh"
-  eval $CPROBE $cprobe_flags -f1 >$cprobe_out 2>/dev/null
-  if test -f $cprobe_out; then
-    . $cprobe_out
-    rm -f $cprobe_out
-  fi
-
-  CPP_FLAG=-E
-  c_flag="-c"
-  o_obj_flag="-o"
-  o_exe_flag="-o"
-  exe_ext=
-  obj_ext="o"
-
-  case "$CC_ID" in
-    ticc)
-      CPP_FLAG=-ppl
-      ;;
-    msc)
-      CPP_FLAG="/E"
-      c_flag="/c"
-      o_obj_flag="/Fo:"
-      o_exe_flag="/Fe:"
-      ;;
-  esac
-
-  if test x$CC_OS = xwindows; then
-    exe_ext=".exe"
-    obj_ext="obj"
-  fi
-}
-
 clean_exit() {
-  exit_status=$1
-
-  cd $orig_dir
-  if test -d $test_dir; then
-    rm -rf $test_dir
-  fi
-  exit $exit_status
+  ecode=$1
+  cd /tmp
+  rm -rf $test_dir
+  exit $ecode
 }
 
-setup_test_dir() {
-  rm -f $test_dir/*
-  cd $test_dir
-  
-  test_src_base=test_src_base.$c_ext
-  
-  echo "" >$test_src_base
-  for inc in $op_with_inc; do
-    inc=`echo "$inc" | sed 's/[<]//' | sed 's/[>]//'`
-    echo "#include <$inc>" >> $test_src_base
-  done
-}
-
+op_cmd=gcc
+op_cctype=gcc
+op_inc=
+op_cflags=
 op_def=
 while test $# -gt 0; do
-  param=$1
-  case "$param" in
+  case "$1" in
     -h|-help|--help)
       print_help
       exit 0
       ;;
-    -v|-version)
+    -cmd=*)
+      op_cmd=`echo "$1" | sed 's/^[^=]*=//'`
+      ;;
+    -cctype=*)
+      op_cctype=`echo "$1" | sed 's/^[^=]*=//'`
+      ;;
+    -inc=*)
+      arg=`echo "$1" | sed 's/^[^=]*=//'`
+      op_inc="$op_inc $arg"
+      ;;
+    -v)
       print_version
       exit 0
       ;;
-    -c++)
-      lang_mode=c++
-      c_ext="cpp"
-      ;;
-    CMD=*)
-      CC=`echo "$param" | sed 's/^[^=]*=//' | sed 's/^ *//' | sed 's/ *$//'`
-      ;;
-    FLAGS=*)
-      CFLAGS=`echo "$param" | sed 's/^[^=]*=//' | sed 's/^ *//' | sed 's/ *$//'`
-      ;;
-    INC=*)
-      _op_with_inc=`echo "$param" | sed 's/^[^=]*=//'`
-      op_with_inc="$op_with_inc $_op_with_inc"
-      ;;
-    -[ID]*)
-      op_flags_add="$op_flags_add $param"
+    -*)
+      op_cflags="$op_cflags $1"
       ;;
     *.h)
-      op_inc="$op_inc $param"
+      op_inc="$op_inc $1"
       ;;
     *.H|*.[Hh]++|*.[Hh][Hh]|*.[Hh][Xx][Xx]|*.[Hh][Pp][Pp])
-      op_inc="$op_inc $param"
-      lang_mode=c++
+      op_inc="$op_inc $1"
       ;;
     *)
       op_def="$op_def $1"
@@ -259,6 +125,21 @@ while test $# -gt 0; do
   esac
   shift
 done
+
+cpp_flag=-E
+case "$op_cctype" in
+  gcc|clang|mingw) : ;;
+  ticc)
+    cpp_flag=-ppl
+    ;;
+  msc)
+    cpp_flag="/E"
+    ;;
+  *)
+    echo "$script_name: error: invalid compiler type $op_cctype" >&2
+    exit 1
+    ;;
+esac
 
 if test -z "$op_def"; then
   exit 0
@@ -270,65 +151,20 @@ if test ! -d $test_dir; then
   echo "$script_name: error: could not create temporary directory $test_dir" >&2
   exit 1
 fi
-
-CFLAGS=`echo "$op_flags_add $CFLAGS" | sed 's/^ *//' | sed 's/ *$//'`
-op_with_inc=`echo "$op_with_inc" | sed 's/^ *//' | sed 's/ *$//'`
-
-################################################################################
-# TEST COMPILER
-probe_cc
-cc_c="$CC_CMD $c_flag"
-
 cd $test_dir
-
-if test -z "$CC_CMD"; then
-  if test -z "$CC"; then
-    printf "%s\n" "compiler not found" >&2
-  else
-    printf "%s\n" "checking compiler $CC ... Failed" >&2
-  fi
-  clean_exit 1
-fi
 
 ################################################################################
 # SET UP TEST DIR
-setup_test_dir
+test_src_base=test_src_base.$c_ext
+
+echo "" >$test_src_base
+for inc in $op_inc; do
+  inc=`echo "$inc" | sed 's/[<]//' | sed 's/[>]//'`
+  echo "#include <$inc>" >> $test_src_base
+done
+
 test_src=test_src.$c_ext
 test_pp=test_src.pp
-test_obj=test.$obj_ext
-
-################################################################################
-# TEST CFLAGS
-if test -n "$CFLAGS"; then
-  cat <<EOF >$test_src
-int main(int argc, char *argv[]) {
-  return 0;
-}
-EOF
-  $cc_c $CFLAGS $o_obj_flag $test_obj $test_src 2>&1
-  ret=$?
-  if test $ret -ne 0; then
-    echo "%s" "checking compiler flags '$CFLAGS'... Failed" >&2
-    clean_exit $ret
-  fi
-  rm -f $test_src
-  rm -f test.o*
-fi
-
-################################################################################
-# TEST op_with_inc
-if test -n "$op_with_inc"; then
-  cat $test_src_base > $test_src
-  echo "int cppdef_test = 1;" >> $test_src
-
-  $cc_c $CFLAGS $o_obj_flag $test_obj $test_src 2>&1
-  ret=$?
-  if test $ret -ne 0; then
-    echo "%s" "checking headers '$op_with_inc'... Failed" >&2
-    clean_exit $ret
-  fi
-  rm -f test.o*
-fi
 
 ################################################################################
 # READ DEFINES
@@ -341,12 +177,20 @@ for def in $op_def; do
 CPPDEF_DEFVAL=$def
 #endif
 EOF
-  if test "$CC_ID" = ticc; then
-    $CC_CMD $CFLAGS $CPP_FLAG $test_src 2>/dev/null
+  if test "$op_cctype" = ticc; then
+    $op_cmd $op_cflags $cpp_flag $test_src 2>/dev/null
+    if test $? != 0; then
+      echo "$script_name: CPP error" >&2
+      clean_exit 1
+    fi
     cat $test_pp > test_c.out
     rm -f $test_pp
   else
-    $CC_CMD $CFLAGS $CPP_FLAG $test_src 2>/dev/null > test_c.out
+    $op_cmd $op_cflags $cpp_flag $test_src 2>/dev/null > test_c.out
+    if test $? != 0; then
+      echo "$script_name: CPP error" >&2
+      clean_exit 1
+    fi
   fi
 
   defval=`cat test_c.out | grep "^ *CPPDEF_DEFVAL" | sed 's/^ *CPPDEF_DEFVAL=//' | sed 's/ *$//' | sed 's/"$//' |  sed 's/^"//' | tr -d '\n'`
@@ -360,6 +204,5 @@ EOF
 done
 
 echo "$defvals" | sed 's/^ *//'
-rm -f $test_src
 clean_exit 0
 
