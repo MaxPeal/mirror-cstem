@@ -174,6 +174,7 @@ op_cstr=
 op_src=
 op_inc=
 op_libs=
+op_libs_rev=
 op_cflags=
 op_ldflags=
 op_no_echo=
@@ -184,9 +185,9 @@ op_status_id=
 op_no_break=
 op_echo_log=
 op_log_file=
-test_src=
-test_libs=
-test_flags=
+have_src=
+have_libs=
+have_flags=
 
 while test $# -gt 0; do
   case "$1" in
@@ -197,7 +198,7 @@ while test $# -gt 0; do
     \#if*)
       eval def$def_num=\$1
       def_num=`expr $def_num + 1`
-      test_src=1
+      have_src=1
       ;;
     -def=*)
       def_str=`echo "$1" | sed 's/^[^=]*=//' | sed 's/^ *//'`
@@ -213,16 +214,16 @@ while test $# -gt 0; do
           done
           ;;
       esac
-      test_src=1
+      have_src=1
       ;;
     *"()"*)
       op_func=`echo "$op_func $1" | sed 's/( *)/ /g'`
-      test_src=1
+      have_src=1
       ;;
     -func=*)
       funcs=`echo "$1" | sed 's/^[^=]*=//' | sed 's/( *)/ /g'`
       op_func="$op_func $funcs"
-      test_src=1
+      have_src=1
       ;;
     -type=*)
       types=`echo "$1" | sed 's/^[^=]*=//'`
@@ -233,86 +234,93 @@ while test $# -gt 0; do
         type_num=`expr $type_num + 1`
       done
       IFS=$IFS_save
-      test_src=1
+      have_src=1
       ;;
     -enum=*)
       arg=`echo "$1" | sed 's/^[^=]*=//'`
       op_enum="$op_enum $arg"
-      test_src=1
+      have_src=1
       ;;
     -var=*)
       arg=`echo "$1" | sed 's/^[^=]*=//'`
       op_var="$op_var $arg"
-      test_src=1
+      have_src=1
       ;;
     -sym=*)
       arg=`echo "$1" | sed 's/^[^=]*=//'`
       op_sym="$op_sym $arg"
-      test_src=1
+      have_src=1
       ;;
     =*)
       arg=`echo "$1" | sed 's/=*//'`
       op_rval="$op_rval $arg"
-      test_src=1
+      have_src=1
       ;;
     -rval=*)
       arg=`echo "$1" | sed 's/^[^=]*=//'`
       op_rval="$op_rval $arg"
-      test_src=1
+      have_src=1
       ;;
     -cstr=*)
       op_cstr=`echo "$1" | sed 's/^[^=]*=//'`
-      test_src=1
+      have_src=1
       ;;
     *.c)
       op_src="$op_src $1"
-      test_src=1
+      have_src=1
       ;;
     *.C|*.[Cc][Cc]|*.[Cc][Pp][Pp]|*.[Cc][Xx][Xx]|*.[Cc]++)
       op_src="$op_src $1"
       lang_mode=c++
-      test_src=1
+      have_src=1
       ;;
     *.h)
       op_inc="$op_inc $1"
-      test_libs=1
+      have_libs=1
       ;;
     *.H|*.[Hh]++|*.[Hh][Hh]|*.[Hh][Xx][Xx]|*.[Hh][Pp][Pp])
       op_inc="$op_inc $1"
       lang_mode=c++
-      test_libs=1
+      have_libs=1
       ;;
     -inc=*)
       arg=`echo "$1" | sed 's/^[^=]*=//'`
       op_inc="$op_inc $arg"
-      test_libs=1
+      have_libs=1
+      ;;
+    -log)
+      op_echo_log=1
+      ;;
+    -log=*)
+      op_log_file=`echo "$1" | sed 's/^[^=]*=//'`
       ;;
     -l*)
-      lib=`echo "$1" | sed 's/^-l//'`
-      op_libs="$op_libs $lib"
-      test_libs=1
+      op_libs="$op_libs $1"
+      op_libs_rev="$1 $op_libs_rev"
+      have_libs=1
       ;;
     lib*|*.so|*.so.*|*.a)
       op_libs="$op_libs $1"
-      test_libs=1
+      op_libs_rev="$1 $op_libs_rev"
+      have_libs=1
       ;;
     -[IDU]*)
       op_cflags="$op_cflags $1"
-      test_flags=1
+      have_flags=1
       ;;
     -L*)
       op_ldflags="$op_ldflags $1"
-      test_flags=1
+      have_flags=1
       ;;
     -cflags=*)
       arg=`echo "$1" | sed 's/^[^=]*=//'`
       op_cflags="$op_cflags $arg"
-      test_flags=1
+      have_flags=1
       ;;
     -ldflags=*)
       arg=`echo "$1" | sed 's/^[^=]*=//'`
       op_ldflags="$op_ldflags $arg"
-      test_flags=1
+      have_flags=1
       ;;
     -cctype=*)
       op_cctype=`echo "$1" | sed 's/^[^=]*=//'`
@@ -341,12 +349,6 @@ while test $# -gt 0; do
     -no-break)
       op_no_break=1
       ;;
-    -log)
-      op_echo_log=1
-      ;;
-    -log=*)
-      op_log_file=`echo "$1" | sed 's/^[^=]*=//'`
-      ;;
     -v)
       print_version
       exit 0
@@ -354,7 +356,7 @@ while test $# -gt 0; do
     -*)
       op_cflags="$op_cflags $1"
       op_ldflags="$op_ldflags $1"
-      test_flags=1
+      have_flags=1
       ;;
     *)
       if test x$first_param = x1; then
@@ -402,7 +404,7 @@ obj_ext="o"
 ld_cmd=$op_cmd
 
 case "$op_cctype" in
-  gcc|clang) : ;
+  gcc|clang) : ;;
   mingw)
     exe_ext=".exe"
     obj_ext="obj"
@@ -442,7 +444,7 @@ test_exe=app$exe_ext
 
 exit_status=0
 
-if test x$test_src = x1; then
+if test x$have_src = x1; then
 ################################################################################
 # TEST SOURCES
   test_src_base=test_src_base.$c_ext
@@ -866,7 +868,7 @@ EOF
     done
   fi
 
-elif test x$test_libs = x1; then
+elif test x$have_libs = x1; then
 ################################################################################
 # TEST LIBRARIES
 
@@ -924,9 +926,9 @@ EOF
     if test $ret -ne 0; then
       echo_status "%s\n" "Failed"
       libs=
-      for lib in $op_libs; do
+      for lib in $op_libs_rev; do
         echo_status "%s" "  $lib ... "
-        libs="$libs $lib"
+        libs="$lib $libs"
         echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $libs" >> $ctest_log
         $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $libs >> $ctest_log 2>&1
         if test $? -ne 0; then
@@ -951,7 +953,7 @@ EOF
     rm -f test.o*
   fi
   
-elif test x$test_flags = x1; then
+elif test x$have_flags = x1; then
 ################################################################################
 # TEST FLAGS
 
