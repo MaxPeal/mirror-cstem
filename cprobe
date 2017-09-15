@@ -104,15 +104,15 @@ abs_path() {
   fi
 }
 
-version_string="1.2"
+version_string="1.3"
 script_name=`basename "$0"`
 orig_dir=`pwd`
 abs_path $0
 script_abs=$abs_path_ret
 script_dir=`dirname "$script_abs"`
 out_format=
-lang_mode=c
 c_ext="c"
+cxx_ext="cpp"
 test_dir=/tmp/cprobe_$$
 cc_is_cross=0
 headers=$test_dir/cprobe_inc_headers
@@ -128,11 +128,11 @@ Usage: $script_name [cmd] [options]
 
 Options:
  cmd       optional 1st parameter specifies compiler command
- -c++      enable C++ mode
  -type     get compiler type
  -ver      get compiler version
  -cmd      get compiler command
  -std      get language standard
+ -cxxstd   get C++ language standard
  -os       get target OS
  -osver    get target OS version
  -arch     get target architecture
@@ -266,6 +266,7 @@ check_cc() {
   check_cc_found=
   check_cpp_ok=
   check_cc_ok=
+  check_cxx_ok=
   cmd_type=
   cc_is_cross=1
   c_flag="-c"
@@ -363,8 +364,28 @@ EOF
   fi
   check_cpp_ok=1
 
-if test $lang_mode = "c++"; then
   cat > $test_src <<EOF
+int main(int argc, char** argv)
+{
+  return 0;
+}
+EOF
+  if ($prop_cmd $prop_cflags $c_flag $test_src >/dev/null) 2>/dev/null; then
+    check_cc_ok=1
+    rm -f testapp$exe_ext
+    ($prop_cmd $prop_cflags $o_exe_flag testapp$exe_ext $test_src >/dev/null) 2>/dev/null
+    if test -x testapp$exe_ext; then
+      (./testapp$exe_ext >/dev/null) 2>/dev/null
+      if test $? -eq 0; then
+        cc_is_cross=0
+      fi
+    fi
+  fi
+
+
+  if test x$check_cc_ok = x1; then
+    test_src_cxx="test.$cxx_ext"
+    cat > $test_src_cxx <<EOF
 class test_class
 {
   public:
@@ -377,23 +398,15 @@ int main(int argc, char** argv)
   return 0;
 }
 EOF
-else
-  cat > $test_src <<EOF
-int main(int argc, char** argv)
-{
-  return 0;
-}
-EOF
-fi
-
-  if ($prop_cmd $prop_cflags $c_flag $test_src >/dev/null) 2>/dev/null; then
-    check_cc_ok=1
-    rm -f testapp$exe_ext
-    ($prop_cmd $prop_cflags $o_exe_flag testapp$exe_ext $test_src >/dev/null) 2>/dev/null
-    if test -x testapp$exe_ext; then
-      (./testapp$exe_ext >/dev/null) 2>/dev/null
-      if test $? -eq 0; then
-        cc_is_cross=0
+    if ($prop_cmd $prop_cflags $c_flag $test_src_cxx >/dev/null) 2>/dev/null; then
+      check_cxx_ok=1
+      rm -f testapp$exe_ext
+      ($prop_cmd $prop_cflags $o_exe_flag testapp$exe_ext $test_src_cxx >/dev/null) 2>/dev/null
+      if test -x testapp$exe_ext; then
+        (./testapp$exe_ext >/dev/null) 2>/dev/null
+        if test $? -eq 0; then
+          cc_is_cross=0
+        fi
       fi
     fi
   fi
@@ -423,14 +436,12 @@ EOF
 }
 
 load_cc_macros() {
-  if test x$cc_macros_loaded = x1; then
-    return
-  fi
+  param_ext=$1
 
   inc_headers
   
   cd $test_dir
-  probe_h="cprobe_$$.$c_ext"
+  probe_h="cprobe_$$.$param_ext"
   probe_pp="cprobe_$$.pp"
   probe_h_out="cprobe_$$_out"
   probe_sh="cprobe_$$.sh"
@@ -455,7 +466,10 @@ read_cc_props_base() {
   prop_type=
   prop_version=
 
-  load_cc_macros
+  if test x$check_cxx_ok = x1; then
+    load_cc_macros $cxx_ext
+  fi
+  load_cc_macros $c_ext
 
 ################################################################################
 # DETECT COMPILER AND VERSION
@@ -484,23 +498,21 @@ read_cc_props_base() {
     prop_type=compcert
   fi
 
-  if test $lang_mode = "c++"; then
-    if test -n "$DSET__HP_cc"; then
-      prop_type=hpansic
-    fi
-  else
-    if test -n "$DSET__HP_aCC"; then
-      prop_type=hpacc
+  if test -n "$DSET__HP_cc"; then
+    prop_type=hpansic
+  fi
 
-      if test -n "$DVAL__HP_aCC"; then
-        if test "x$DVAL__HP_aCC" = "x1"; then
-          prop_vmajor=1
-        else
-          prop_vmajor=`expr "0$DVAL__HP_aCC" / 10000`
-          tbuf=`expr "0$DVAL__HP_aCC" % 10000`
-          prop_vminor=`expr "0$tbuf" / 100`
-          prop_vrevision=`expr "0$DVAL__HP_aCC" % 100`
-        fi
+  if test -n "$DSET__HP_aCC"; then
+    prop_type=hpacc
+
+    if test -n "$DVAL__HP_aCC"; then
+      if test "x$DVAL__HP_aCC" = "x1"; then
+        prop_vmajor=1
+      else
+        prop_vmajor=`expr "0$DVAL__HP_aCC" / 10000`
+        tbuf=`expr "0$DVAL__HP_aCC" % 10000`
+        prop_vminor=`expr "0$tbuf" / 100`
+        prop_vrevision=`expr "0$DVAL__HP_aCC" % 100`
       fi
     fi
   fi
@@ -662,6 +674,7 @@ read_cc_props_base() {
 
 read_cc_props_ext() {
   prop_std=
+  prop_cxx_std=
   prop_os=
   prop_os_version=
   prop_arch=
@@ -671,39 +684,35 @@ read_cc_props_ext() {
   prop_posix=
   prop_sus=
 
-  load_cc_macros
-
-  if test $lang_mode = "c++"; then
-    if test -n "$DSET__cplusplus_cli"; then
-      prop_std=cxx_cli
-    elif test -n "$DSET__embedded_cplusplus"; then
-      prop_std=embedded_cxx
-    elif test -n "$DSET__cplusplus"; then
-      std_version=`echo "$DVAL__cplusplus" | sed 's/[a-zA-Z_]//g'`
-      if test "$std_version" -ge 201402; then
-        prop_std=cxx14
-      elif test "$std_version" -ge 201103; then
-        prop_std=cxx11
-      elif test "$std_version" -ge 199711; then
-        prop_std=cxx98
-      fi
+  if test -n "$DSET__cplusplus_cli"; then
+    prop_cxx_std=cxx_cli
+  elif test -n "$DSET__embedded_cplusplus"; then
+    prop_cxx_std=embedded_cxx
+  elif test -n "$DSET__cplusplus"; then
+    std_version=`echo "$DVAL__cplusplus" | sed 's/[a-zA-Z_]//g'`
+    if test "$std_version" -ge 201402; then
+      prop_cxx_std=cxx14
+    elif test "$std_version" -ge 201103; then
+      prop_cxx_std=cxx11
+    elif test "$std_version" -ge 199711; then
+      prop_cxx_std=cxx98
     fi
-  else
-    if test -n "$DSET__STDC__"; then
+  fi
+
+  if test -n "$DSET__STDC__"; then
+    prop_std=c89
+  fi
+
+  if test -n "$DSET__STDC_VERSION__"; then
+    std_version=`echo "$DVAL__STDC_VERSION__" | sed 's/[a-zA-Z_]//g'`
+    if test "$std_version" -ge 201112; then
+      prop_std=c11
+    elif test "$std_version" -ge 199901; then
+      prop_std=c99
+    elif test "$std_version" -ge 199409; then
+      prop_std=c95
+    else
       prop_std=c89
-    fi
-
-    if test -n "$DSET__STDC_VERSION__"; then
-      std_version=`echo "$DVAL__STDC_VERSION__" | sed 's/[a-zA-Z_]//g'`
-      if test "$std_version" -ge 201112; then
-        prop_std=c11
-      elif test "$std_version" -ge 199901; then
-        prop_std=c99
-      elif test "$std_version" -ge 199409; then
-        prop_std=c95
-      else
-        prop_std=c89
-      fi
     fi
   fi
 
@@ -1258,32 +1267,16 @@ get_cc_list() {
 
   case "x$config_os" in
     xmacos)
-      if test $lang_mode = "c++"; then
-        cc_list="clang++ g++ c++ CC"
-      else
-        cc_list="clang gcc c99 cc c89"
-      fi
+      cc_list="clang gcc c99 cc c89 clang++ g++ c++ CC"
       ;;
     xaix)
-      if test $lang_mode = "c++"; then
-        cc_list="xlc++ xlC g++ clang++ c++ CC"
-      else
-        cc_list="xlc gcc clang c99 cc c89"
-      fi
+      cc_list="xlc gcc clang c99 cc c89 xlc++ xlC g++ clang++ c++ CC"
       ;;
     xcygwin | xmsys | xmks)
-      if test $lang_mode = "c++"; then
-        cc_list="g++ clang++ cl.exe c++ CC"
-      else
-        cc_list="gcc clang cl.exe c99 cc c89"
-      fi
+      cc_list="gcc clang cl.exe c99 cc c89 g++ clang++ c++ CC"
       ;;
     *)
-      if test $lang_mode = "c++"; then
-        cc_list="g++ clang++ c++ CC"
-      else
-        cc_list="gcc clang c99 cc c89"
-      fi
+      cc_list="gcc clang c99 cc c89 g++ clang++ c++ CC"
       ;;
   esac
 }
@@ -1381,10 +1374,6 @@ while test $# -gt 0; do
       print_version
       exit 0
       ;;
-    -c++)
-      lang_mode=c++
-      c_ext="cpp"
-      ;;
     -type)
       print_string="$print_string type"
       ;;
@@ -1396,6 +1385,9 @@ while test $# -gt 0; do
       ;;
     -std)
       print_string="$print_string std"
+      ;;
+    -cxxstd)
+      print_string="$print_string cxx_std"
       ;;
     -os)
       print_string="$print_string os"
@@ -1459,7 +1451,8 @@ if test -z "$print_string" && test -z "$out_format"; then
 type:               ${prop_type:--}
 version:            ${prop_version:--}
 command:            ${prop_cmd:--}
-language standard:  ${prop_std:--}
+C standard:         ${prop_std:--}
+C++ standard:       ${prop_cxx_std:--}
 target os:          ${prop_os:--}
 target os version:  ${prop_os_version:--}
 target arch:        ${prop_arch:--}
@@ -1473,10 +1466,10 @@ EOF
 elif test x$out_format = x4; then
   printf "%s\n" "$prop_type:$prop_os:$prop_arch:$prop_cmd"
 elif test x$out_format = x5; then
-  printf "%s\n" "$prop_type:$prop_version:$prop_std:$prop_os:$prop_os_version:$prop_arch:$prop_bitness:$prop_endianess:$prop_data_model:$prop_flag_cross:$prop_posix:$prop_sus:$prop_cmd"
+  printf "%s\n" "$prop_type:$prop_version:$prop_std:$prop_cxx_std:$prop_os:$prop_os_version:$prop_arch:$prop_bitness:$prop_endianess:$prop_data_model:$prop_flag_cross:$prop_posix:$prop_sus:$prop_cmd"
 else
   if test -z "$print_string"; then
-    print_string="cmd type version std os os_version arch bitness endianness data_model flag_cross posix sus"
+    print_string="cmd type version std cxx_std os os_version arch bitness endianness data_model flag_cross posix sus"
   fi
   print_space=
   for prop in $print_string; do
