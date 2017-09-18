@@ -140,6 +140,7 @@ Options:
  -endian   get target endianness
  -dm       get target data model
  -cross    print 'true' and return 0 if compiler is cross-compiler
+ -cxx      print 'true' and return 0 if compiler is C++ compiler
  -posix    get POSIX support version
  -sus      get SUS support version
  -f1       print in format VAR="VALUE"
@@ -270,10 +271,8 @@ check_cc() {
   cmd_type=
   cc_is_cross=1
   c_flag="-c"
-  o_obj_flag="-o"
   o_exe_flag="-o"
   exe_ext=
-  obj_ext="o"
 
   ($prop_cmd >/dev/null) 2>/dev/null
   if test $? -ge 126; then
@@ -281,41 +280,49 @@ check_cc() {
   fi
   check_cc_found=1
 
-  cc_cmd_base=`basename "$prop_cmd"`
-  case "$cc_cmd_base" in
-    gcc*|g++*|clang*)
-      CPP_FLAG=-E
-      cmd_type=gcc
-      ;;
-    *)
-      cc_cmd0=`echo "$cc_cmd_base" | sed 's# .*##'`
-      if test "$cc_cmd_base" != "$prop_cmd"; then
-        cc_cmd_dir=`dirname "$prop_cmd"`
-        cc_cmd0="$cc_cmd_dir/$cc_cmd0"
-      fi
-      ($cc_cmd0 -h 2>&1 | grep -i texas >/dev/null) 2>/dev/null
-      if test $? -eq 0; then
-        CPP_FLAG=-ppl
-        cmd_type=ticc
-      fi
-      if test -z "$cmd_type"; then
-        ($cc_cmd0 2>&1 | grep -i microsoft >/dev/null) 2>/dev/null
-        if test $? -eq 0; then
-          CPP_FLAG="/E"
-          c_flag="/c"
-          o_obj_flag="/Fo:"
-          o_exe_flag="/Fe:"
-          cmd_type=msc
-          exe_ext=".exe"
-          obj_ext="obj"
-        fi
-      fi
-      if test -z "$cmd_type"; then
-        CPP_FLAG=-E
-        cmd_type=gcc
-      fi
-      ;;
-  esac
+  probe_out=/tmp/cc_probe_$$.txt
+  rm -f $probe_out
+  cc_cmd0=`echo "$prop_cmd" | sed 's# [^/]*$##'`
+  ($cc_cmd0 -version >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 --version >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 -V >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 -qversion >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 -h >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 --help >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 >>$probe_out) 2>>$probe_out
+
+  CPP_FLAG=-E
+  if grep "Texas Instruments" $probe_out | grep "Tools Copyright" >/dev/null; then
+    cmd_type=ticc
+    CPP_FLAG=-ppl
+  elif grep -i mingw $probe_out >/dev/null; then
+    cmd_type=mingw
+  elif grep -i gcc $probe_out >/dev/null && grep -i "free software foundation" $probe_out >/dev/null; then
+    cmd_type=gcc
+  elif grep -i "clang version" $probe_out >/dev/null; then
+    cmd_type=clang
+  elif grep "tcc version" $probe_out >/dev/null; then
+    cmd_type=tinyc
+  elif grep -i "Sun C" $probe_out >/dev/null; then
+    cmd_type=sunpro
+  elif grep -i "IBM XL C" $probe_out >/dev/null; then
+    cmd_type=xlc
+  elif grep -i "MIPSpro Compilers" $probe_out >/dev/null; then
+    cmd_type=mipspro
+  elif grep -i microsoft $probe_out >/dev/null; then
+    cmd_type=msc
+    CPP_FLAG="/E"
+    c_flag="/c"
+    o_exe_flag="/Fe:"
+    exe_ext=".exe"
+  elif grep -i "PGI Compilers and Tools" $probe_out >/dev/null; then
+    cmd_type=pgi
+  elif grep "SDCC" $probe_out >/dev/null; then
+    cmd_type=sdcc
+  else
+    cmd_type=cc
+  fi
+  rm -f $probe_out
 
   rm -f $test_dir/*
   cd $test_dir
@@ -436,12 +443,11 @@ EOF
 }
 
 load_cc_macros() {
-  param_ext=$1
-
   inc_headers
   
   cd $test_dir
-  probe_h="cprobe_$$.$param_ext"
+  probe_h="cprobe_$$.$c_ext"
+  probe_hxx="cprobe_$$.$cxx_ext"
   probe_pp="cprobe_$$.pp"
   probe_h_out="cprobe_$$_out"
   probe_sh="cprobe_$$.sh"
@@ -453,8 +459,18 @@ load_cc_macros() {
   if test $cmd_type = ticc; then
     $prop_cmd $CFLAGS $CPP_FLAG $probe_h 2>/dev/null
     cat $probe_pp > $probe_h_out
+    if test x$check_cxx_ok = x1; then
+      rm -f $probe_pp
+      cat $probe_h > $probe_hxx
+      $prop_cmd $CFLAGS $CPP_FLAG $probe_hxx 2>/dev/null
+      cat $probe_pp >> $probe_h_out
+    fi
   else
     $prop_cmd $CFLAGS $CPP_FLAG $probe_h 2>/dev/null > $probe_h_out
+    if test x$check_cxx_ok = x1; then
+      cat $probe_h > $probe_hxx
+      $prop_cmd $CFLAGS $CPP_FLAG $probe_hxx 2>/dev/null >> $probe_h_out
+    fi
   fi
   cat $probe_h_out | grep "^D[SV][EA][TL]" | sed 's/= */=/' | sed 's/ *$//' | sed 's/=\(.*\)$/="\1"/' | sed 's/""*/"/g' | sed 's/ *= */=/' | sed 's/="*$/=/' | sed 's///' > $probe_sh
   . ./$probe_sh
@@ -466,9 +482,6 @@ read_cc_props_base() {
   prop_type=
   prop_version=
 
-  if test x$check_cxx_ok = x1; then
-    load_cc_macros $cxx_ext
-  fi
   load_cc_macros $c_ext
 
 ################################################################################
@@ -1181,83 +1194,46 @@ probe_os() {
     return
   fi
 
-  uname_m=`(uname -m) 2>/dev/null` || uname_m=
   uname_s=`(uname -s) 2>/dev/null` || uname_s=
-  uname_o=`(uname -o) 2>/dev/null` || uname_o=
+  config_os=`echo "$uname_s" | tr [A-Z] [a-z]`
+# standard values: netbsd openbsd riscos aix freebsd minix qnx dragonfly unixware
 
-  uname_s_lc=`echo "$uname_s" | tr [A-Z] [a-z]`
-
-  case "$uname_s_lc" in
-    netbsd)
-      config_os=netbsd
-      ;;
-    openbsd)
-      config_os=openbsd
-      ;;
-    mirbsd)
-      config_os=miros
-      ;;
-    riscos)
-      config_os=riscos
-      ;;
-    sco*)
-      config_os=sco
-      ;;
-    sunos)
-      config_os=solaris
-      ;;
-    irix*)
-      config_os=irix
-      ;;
-    aix)
-      config_os=aix
-      ;;
-    hp-ux)
-      config_os=hpux
-      ;;
-    freebsd)
-      config_os=freebsd
-      ;;
+  case "$config_os" in
+    linux)
+      config_os=gnulinux ;;
     darwin)
       sw_vers >/dev/null 2>&1
       if test $? -eq 0; then
         sw_vers_prod_name=`sw_vers -productName | sed 's/ //g' | tr '[A-Z]' '[a-z]'`
         case "$sw_vers_prod_name" in
           macos*)
-            config_os=macos
-            ;;
+            config_os=macos ;;
         esac
-      fi
-      ;;
+      fi ;;
     cygwin*)
-      config_os=cygwin
-      ;;
-    minix)
-      config_os=minix
-      ;;
+      config_os=cygwin ;;
+    sunos)
+      config_os=solaris ;;
+    procnto*)
+      config_os=qnx ;;
     gnu)
-      config_os=gnuhurd
-      ;;
-    linux)
-      config_os=gnulinux
-      ;;
-    procnto* | qnx)
-      config_os=qnx
-      ;;
-    dragonfly)
-      config_os=dragonfly
-      ;;
-    unixware)
-      config_os=unixware
-      ;;
+      config_os=gnuhurd ;;
+    hp-ux)
+      config_os=hpux ;;
+    irix*)
+      config_os=irix ;;
+    mirbsd)
+      config_os=miros ;;
+    sco*)
+      config_os=sco ;;
   esac
 
   if test x$config_os = x; then
-    uname_o_lc=`echo "$uname_o" | tr [A-Z] [a-z]`
-    case "$uname_o_lc" in
+    uname_o=`(uname -o) 2>/dev/null` || uname_o=
+    config_os=`echo "$uname_o" | tr [A-Z] [a-z]`
+    case "$config_os" in
       msys*)
-        config_os=msys
-        ;;
+        config_os=msys ;;
     esac
   fi
 }
@@ -1318,10 +1294,16 @@ probe_base() {
   fi
   probe_cflags_ok=1
 
-  if test $cc_is_cross = 1; then
+  if test x$cc_is_cross = x1; then
     prop_flag_cross="true"
   else
     prop_flag_cross="false"
+  fi
+
+  if test x$check_cxx_ok = x1; then
+    prop_flag_cxx="true"
+  else
+    prop_flag_cxx="false"
   fi
 
   read_cc_props_base
@@ -1410,6 +1392,9 @@ while test $# -gt 0; do
     -cross)
       print_string="$print_string flag_cross"
       ;;
+    -cxx)
+      print_string="$print_string flag_cxx"
+      ;;
     -posix)
       print_string="$print_string posix"
       ;;
@@ -1424,7 +1409,7 @@ while test $# -gt 0; do
       ;;
     *)
       if test x$param1 = x1; then
-        CC=$1
+        CC=`echo "$1" | sed "s#^\(\.\.*\)/#$orig_dir/\1/#"`
       else
         CFLAGS="$CFLAGS $1"
       fi
@@ -1460,16 +1445,17 @@ bitness:            ${prop_bitness:--}
 endianness:         ${prop_endianness:--}
 data model:         ${prop_data_model:--}
 cross compiler:     $prop_flag_cross
+C++ compiler:       $prop_flag_cxx
 posix version:      ${prop_posix:--}
 sus version:        ${prop_sus:--}
 EOF
 elif test x$out_format = x4; then
   printf "%s\n" "$prop_type:$prop_os:$prop_arch:$prop_cmd"
 elif test x$out_format = x5; then
-  printf "%s\n" "$prop_type:$prop_version:$prop_std:$prop_cxx_std:$prop_os:$prop_os_version:$prop_arch:$prop_bitness:$prop_endianess:$prop_data_model:$prop_flag_cross:$prop_posix:$prop_sus:$prop_cmd"
+  printf "%s\n" "$prop_type:$prop_version:$prop_std:$prop_cxx_std:$prop_os:$prop_os_version:$prop_arch:$prop_bitness:$prop_endianess:$prop_data_model:$prop_flag_cross:$prop_flag_cxx:$prop_posix:$prop_sus:$prop_cmd"
 else
   if test -z "$print_string"; then
-    print_string="cmd type version std cxx_std os os_version arch bitness endianness data_model flag_cross posix sus"
+    print_string="cmd type version std cxx_std os os_version arch bitness endianness data_model flag_cross flag_cxx posix sus"
   fi
   print_space=
   for prop in $print_string; do

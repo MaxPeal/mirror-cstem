@@ -89,7 +89,6 @@ Options:
  -L*                   linker flags
  -cflags=<flags>       compiler flags
  -ldflags=<flags>      linker flags
- -cctype=<type>        compiler type: gcc clang mingw ticc msc
  -n                    no echo
  -f                    echo only on fail
  -out=<file>           for every subtest generate status variable and write it to a FILE
@@ -104,6 +103,53 @@ EOF
 
 print_version() {
   echo "ctest $version_string"
+}
+
+probe_cc() {
+  check_cc_found=
+  ($op_cmd >/dev/null) 2>/dev/null
+  if test $? -ge 126; then
+    return
+  fi
+  check_cc_found=1
+
+  probe_out=/tmp/cc_probe_$$.txt
+  rm -f $probe_out
+  cc_cmd0=`echo "$op_cmd" | sed 's# [^/]*$##'`
+  ($cc_cmd0 -version >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 --version >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 -V >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 -qversion >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 -h >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 --help >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 >>$probe_out) 2>>$probe_out
+
+  if grep "Texas Instruments" $probe_out | grep "Tools Copyright" >/dev/null; then
+    op_cctype=ticc
+  elif grep -i mingw $probe_out >/dev/null; then
+    op_cctype=mingw
+  elif grep -i gcc $probe_out >/dev/null && grep -i "free software foundation" $probe_out >/dev/null; then
+    op_cctype=gcc
+  elif grep -i "clang version" $probe_out >/dev/null; then
+    op_cctype=clang
+  elif grep "tcc version" $probe_out >/dev/null; then
+    op_cctype=tinyc
+  elif grep -i "Sun C" $probe_out >/dev/null; then
+    op_cctype=sunpro
+  elif grep -i "IBM XL C" $probe_out >/dev/null; then
+    op_cctype=xlc
+  elif grep -i "MIPSpro Compilers" $probe_out >/dev/null; then
+    op_cctype=mipspro
+  elif grep -i microsoft $probe_out >/dev/null; then
+    op_cctype=msc
+  elif grep -i "PGI Compilers and Tools" $probe_out >/dev/null; then
+    op_cctype=pgi
+  elif grep "SDCC" $probe_out >/dev/null; then
+    op_cctype=sdcc
+  else
+    op_cctype=cc
+  fi
+  rm -f $probe_out
 }
 
 echo_status() {
@@ -161,7 +207,8 @@ log_src() {
 }
 
 first_param=1
-op_cctype=gcc
+op_cmd=
+op_cctype=
 def_num=0
 type_num=0
 op_func=
@@ -321,9 +368,6 @@ while test $# -gt 0; do
       op_ldflags="$op_ldflags $arg"
       have_flags=1
       ;;
-    -cctype=*)
-      op_cctype=`echo "$1" | sed 's/^[^=]*=//'`
-      ;;
     -n)
       op_no_echo=1
       op_echo_fail=
@@ -355,7 +399,7 @@ while test $# -gt 0; do
       ;;
     *)
       if test x$first_param = x1; then
-        op_cmd=$1
+        op_cmd=`echo "$1" | sed "s#^\(\.\.*\)/#$orig_dir/\1/#"`
       else
         printf "%s\n" "$script_name: invalid parameter $1" >&2
         exit 1
@@ -394,34 +438,29 @@ if test -z "$op_cmd"; then
   fi
 fi
 
-cpp_flag=-E
+probe_cc
+if test x$check_cc_found = x; then
+  echo "$script_name: compiler not found: $op_cmd" >&2
+  exit 1
+fi
+
 c_flag="-c"
 o_obj_flag="-o"
 o_exe_flag="-o"
 exe_ext=
 obj_ext="o"
 ld_cmd=$op_cmd
-
 case "$op_cctype" in
-  gcc|clang) : ;;
   mingw)
     exe_ext=".exe"
     obj_ext="obj"
     ;;
-  ticc)
-    cpp_flag=-ppl
-    ;;
   msc)
-    cpp_flag="/E"
     c_flag="/c"
     o_obj_flag="/Fo:"
     o_exe_flag="/Fe:"
     exe_ext=".exe"
     obj_ext="obj"
-    ;;
-  *)
-    echo "$script_name: error: invalid compiler type $op_cctype" >&2
-    exit 1
     ;;
 esac
 

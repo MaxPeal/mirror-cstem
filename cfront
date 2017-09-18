@@ -54,32 +54,59 @@ export CFRONT_BASH_REDIRECTED
 
 
 version_string="cfront 1.0"
-
 script_name=`basename "$0"`
-script_options="$@"
-script_dir=`dirname "$0"`
-
+lang_mode=c
+orig_dir=`pwd`
 
 print_help() {
   cat <<EOF
 C/C++ compiler frontend
 
-$script_name <compiler> <options>
+Usage: $script_name [[type=]cmd] <options>
 
-Compilers:
-  gcc
-  clang
-  mingw
-  xlc
+Options:
+ [type=]cmd            optional 1st parameter specifies optional compiler type and command
+ -c                    compile only sources
+ -o <file>             output file
+ -pic                  generate position-independent code (PIC)
+ -I* -D* -U*           compiler flags
+ -L*                   linker flags
+ -l*|lib*|*.so|*.dll   dynamic libraries
+ *.a                   static libraries
+ *.c|*.C|*.cpp         source files. Other file extensions are recognized
+ *.o|*.obj             object files
+ -lib[=<name>]         create dynamic library. Specify optional name
+ -ver=<string>         library version
+ -d=<dir>              output directory
+ -print                print only commands, but do not execute
+ -mk                   print Make rules
+ -mkdep                print Make dependency rules
+ -v                    print version
+ -htypes               print a list of supported compiler types
+ ...                   unrecognized parameters are forwarded as compiler and linker flags
+EOF
+}
 
-The following options will be translated to the versions corresponding the provided compiler.
-  -c           compile only sources
-  -o <file>    output file
-  *.c          source files
-  *.o|*.obj    object files
-  -print       print the compilation commands, but do not execute them
-  -mk          generate Make rules
-  CC=<cmd>     compiler command
+print_help_types() {
+cat <<EOF
+cc          Generic POSIX compiler
+armc        ARM Compiler (by ARM)
+clang       Clang
+compcert    CompCert C
+gcc         GCC
+hpacc       HP aC++
+hpansic     HP ANSI C
+intel       Intel C/C++
+mingw       MinGW
+mipspro     SGI MIPSPro
+msc         Microsoft Visual C/C++
+pgi         Portland Group C/C++
+sdcc        SDCC (Small Device C Compiler)
+sunpro      Solaris Studio (Sun Studio, SunPro)
+ticc        Texas Instruments C/C++ Compiler
+tinyc       Tiny C Compiler (TCC, TinyCC)
+watcom      Watcom C/C++ (Open Watcom C/C++)
+xlc         IBM XL C/C++
 EOF
 }
 
@@ -87,168 +114,392 @@ print_version() {
   echo "$version_string"
 }
 
+probe_cc() {
+  check_cc_found=
+  ($op_cmd >/dev/null) 2>/dev/null
+  if test $? -ge 126; then
+    return
+  fi
+  check_cc_found=1
+
+  probe_out=/tmp/cc_probe_$$.txt
+  rm -f $probe_out
+  cc_cmd0=`echo "$op_cmd" | sed 's# [^/]*$##'`
+  ($cc_cmd0 -version >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 --version >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 -V >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 -qversion >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 -h >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 --help >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 >>$probe_out) 2>>$probe_out
+
+  if grep "Texas Instruments" $probe_out | grep "Tools Copyright" >/dev/null; then
+    op_cctype=ticc
+  elif grep -i mingw $probe_out >/dev/null; then
+    op_cctype=mingw
+  elif grep -i gcc $probe_out >/dev/null && grep -i "free software foundation" $probe_out >/dev/null; then
+    op_cctype=gcc
+  elif grep -i "clang version" $probe_out >/dev/null; then
+    op_cctype=clang
+  elif grep "tcc version" $probe_out >/dev/null; then
+    op_cctype=tinyc
+  elif grep -i "Sun C" $probe_out >/dev/null; then
+    op_cctype=sunpro
+  elif grep -i "IBM XL C" $probe_out >/dev/null; then
+    op_cctype=xlc
+  elif grep -i "MIPSpro Compilers" $probe_out >/dev/null; then
+    op_cctype=mipspro
+  elif grep -i microsoft $probe_out >/dev/null; then
+    op_cctype=msc
+  elif grep -i "PGI Compilers and Tools" $probe_out >/dev/null; then
+    op_cctype=pgi
+  elif grep "SDCC" $probe_out >/dev/null; then
+    op_cctype=sdcc
+  else
+    op_cctype=cc
+  fi
+  rm -f $probe_out
+}
+
+make_depend() {
+  work_dir=/tmp/cfront$$
+  (mkdir $work_dir) 2>/dev/null
+  rm -f $work_dir/*
+  tmp_file1=dep$$.t
+  tmp_file2=dep$$.t2
+
+  for file in $op_src; do
+    cd $orig_dir
+    if test ! -f $file; then
+      echo "$script_name: error: file not found $file"
+      exit 1
+    fi
+    cp $file $work_dir
+    cd $work_dir
+
+    base_name=`basename "$file" | sed 's/\.[^.]*$//'`
+    if test -n "$out_obj"; then
+      object=$out_obj
+    elif test -n "$op_out_dir"; then
+      object="$op_out_dir/${base_name}.$obj_ext"
+    else
+      object="${base_name}.$obj_ext"
+    fi
+
+    if test "$op_cctype" = ticc; then
+      src_pp="${base_name}.pp"
+      rm -f $src_pp
+      $op_cmd $cpp_flag $op_cflags $file 2>/dev/null
+      if test -f $src_pp; then
+        cat $src_pp | sed -n 's!^# *[0-9][0-9]* *"\([^<][^"]*\)".*!\1!p' | sort | uniq >$tmp_file1
+      fi
+      echo "" >>$tmp_file1
+    else
+      $op_cmd $cpp_flag $op_cflags $file | sed -n 's!^# *[0-9][0-9]* *"\([^<][^"]*\)".*!\1!p' | sort | uniq >$tmp_file1
+    fi
+
+    cat $tmp_file1 | sed "s/^/$object: /" >>$tmp_file2
+    cat $tmp_file1 | sed 's/ *$/:/' >>$tmp_file2
+  done
+
+  cat $tmp_file2 | sort | uniq
+  cd $orig_dir
+  rm -rf $work_dir
+}
 
 if test $# -eq 0; then
   echo "$script_name: error: no parameters specified" >&2
   exit 1
 fi
 
-case "$1" in
-  -h|-help|--help)
-    print_help
-    exit 0
-    ;;
-  -v)
-    print_version
-    exit 0
-    ;;
-  gcc)
-    op_type=gcc
-    cc_cmd=gcc
-    obj_ext=o
-    exe_ext=
-    def_exe_out="a.out"
-    ;;
-  clang)
-    op_type=clang
-    cc_cmd=clang
-    obj_ext=o
-    exe_ext=
-    def_exe_out="a.out"
-    ;;
-  mingw)
-    op_type=mingw
-    cc_cmd=mingw
-    obj_ext=obj
-    exe_ext=".exe"
-    def_exe_out="a.out.exe"
-    ;;
-  xlc)
-    op_type=xlc
-    cc_cmd=xlc
-    obj_ext=o
-    exe_ext=
-    def_exe_out="a.out"
-    ;;
-  *)
-    echo "$script_name: error: invalid compiler type $1" >&2
-    exit 1
-    ;;
-esac
-shift
-
-current_opt=
-op_compile=
-op_outfile=
+first_param=1
+op_cmd=
+op_cctype=
 op_src=
-op_obj=
-src_multi=
+op_cflags=
+op_ldflags=
+op_compile=
+op_ofile=
+op_pic=
+op_lib=
+op_lib_name=
+op_lib_ver=
+op_out_dir=
 op_print=
 op_mk=
-cflags=
-ldflags=
-cc_obj=
+op_mkdep=
+src_multi=
 while test $# -gt 0; do
   case "$1" in
+    -h|-help|--help)
+      print_help
+      exit 0
+      ;;
+    -htypes)
+      print_help_types
+      exit 0
+      ;;
     -c)
       op_compile=1
-      current_opt=
-      cflags="$cflags -c"
       ;;
     -o)
-      current_opt=o
-#      shift
-#      if
+      shift
+      op_ofile=$1
       ;;
-    *.c)
-      if test -n "$op_src"; then
-        src_multi=1
-      fi
-      op_src="$op_src $1"
-      current_opt=
+    -pic)
+      op_pic=1
       ;;
-    *.[oO]|*.[oO][bB][jJ])
-      op_obj="$op_obj $1"
-      current_opt=
+    -lib)
+      op_lib=1
       ;;
-    CC=*)
-      cc_cmd=`echo "$1" | sed 's/^[^=]*=//'`
-      current_opt=
+    -lib=*)
+      op_lib_name=`echo "$1" | sed 's/^[^=]*=//'`
+      ;;
+    -ver=*)
+      op_lib_ver=`echo "$1" | sed 's/^[^=]*=//'`
+      ;;
+    -d=*)
+      op_out_dir=`echo "$1" | sed 's/^[^=]*=//' | sed 's#/*$##'`
       ;;
     -print)
       op_print=1
-      current_opt=
       ;;
     -mk)
       op_mk=1
-      current_opt=
+      ;;
+    -mkdep)
+      op_mkdep=1
+      ;;
+    -v)
+      print_version
+      exit 0
+      ;;
+    *.c)
+      test -n "$op_src" && src_multi=1
+      op_src="$op_src $1"
+      ;;
+    *.C|*.[Cc][Cc]|*.[Cc][Pp][Pp]|*.[Cc][Xx][Xx]|*.[Cc]++)
+      test -n "$op_src" && src_multi=1
+      op_src="$op_src $1"
+      lang_mode=c++
+      ;;
+    *.h)
+      test -n "$op_src" && src_multi=1
+      op_src="$op_src $1"
+      ;;
+    *.H|*.[Hh]++|*.[Hh][Hh]|*.[Hh][Xx][Xx]|*.[Hh][Pp][Pp])
+      test -n "$op_src" && src_multi=1
+      op_src="$op_src $1"
+      lang_mode=c++
+      ;;
+    *.[oO]|*.[oO][bB][jJ])
+      op_obj="$op_obj $1"
+      ;;
+    -l*)
+      op_ldflags="$op_ldflags $1"
+      ;;
+    lib*|*.so|*.so.*|*.a)
+      op_ldflags="$op_ldflags $1"
+      ;;
+    -[IDU]*)
+      op_cflags="$op_cflags $1"
+      ;;
+    -L*)
+      op_ldflags="$op_ldflags $1"
+      ;;
+    -*)
+      op_cflags="$op_cflags $1"
+      op_ldflags="$op_ldflags $1"
       ;;
     *)
-      case "$current_opt" in
-        o)
-          op_outfile=$1
-          cflags="$cflags -o $1"
-          ldflags="$ldflags -o $1"
-          current_opt=
-          ;;
-        *)
-          cflags="$cflags $1"
-          ldflags="$ldflags $1"
-          ;;
-      esac
+      if test x$first_param = x1; then
+        case "$1" in
+          *=*)
+            op_cctype=`echo "$1" | sed 's/=.*//'`
+            op_cmd=`echo "$1" | sed 's/^[^=]*=//' | sed "s#^\(\.\.*\)/#$orig_dir/\1/#"`
+            if test -n "$op_cctype"; then
+              case "$op_cctype" in
+                cc|armc|clang|compcert|gcc|hpacc|hpansic|intel|mipspro|msc|pgi|sdcc|sunpro|ticc|tinyc|watcom|xlc)
+                  : ;;
+                *)
+                  echo "$script_name: invalid compiler type $op_cctype" >&2
+                  exit 1
+                  ;;
+              esac
+            fi
+            ;;
+          *)
+            op_cmd=`echo "$1" | sed "s#^\(\.\.*\)/#$orig_dir/\1/#"`
+            ;;
+        esac
+      else
+        printf "%s\n" "$script_name: invalid parameter $1" >&2
+        exit 1
+      fi
       ;;
   esac
   shift
+  first_param=
 done
 
-
-if test -n "$op_src"; then
-  echo "DEBUG: src_multi = '$src_multi'"
-  echo "DEBUG: op_outfile = '$op_outfile'"
-  if test x$src_multi = x1 && test x$op_compile = x1 && test -n "$op_outfile"; then
+if test -n "$op_ofile" && test x$op_compile = x1; then
+  if test x$src_multi = x1; then
     echo "$script_name: error: cannot specify -o with -c with multiple files" >&2
     exit 1
   fi
+  out_obj=$op_ofile
+fi
+
+if test -z "$op_cmd"; then
+  if test $lang_mode = "c++"; then
+    op_cmd="g++"
+  else
+    op_cmd=gcc
+  fi
+fi
+
+if test -z "$op_cctype"; then
+  probe_cc
+else
+  check_cc_found=
+  ($op_cmd >/dev/null) 2>/dev/null
+  if test $? -ge 126; then
+    return
+  fi
+  check_cc_found=1
+fi
+
+cpp_flag=-E
+c_flag="-c"
+o_obj_flag="-o"
+o_exe_flag="-o"
+exe_ext=
+obj_ext="o"
+case "$op_cctype" in
+  mingw)
+    exe_ext=".exe"
+    obj_ext="obj"
+    ;;
+  ticc)
+    cpp_flag=-ppl
+    ;;
+  msc)
+    cpp_flag="/E"
+    c_flag="/c"
+    o_obj_flag="/Fo:"
+    o_exe_flag="/Fe:"
+    exe_ext=".exe"
+    obj_ext="obj"
+    ;;
+esac
+
+if test x$op_mkdep = x1; then
+  if test -z "$op_src"; then
+    echo "$script_name: no source files specified" >&2
+    exit 1
+  fi
+
+  if test x$check_cc_found = x; then
+    echo "$script_name: compiler not found: $op_cmd" >&2
+    exit 1
+  fi
+
+  make_depend
+
+  exit 0
+fi
+
+if test -n "$op_src"; then
   for src in $op_src; do
     if test x$op_print = x1; then
-      echo "$cc_cmd $cflags $src"
+      echo "$op_cmd $op_cflags $src"
     elif test x$op_mk = x1; then
-      if test -n "$op_outfile" && test x$op_compile = x1; then
-        outfile=$op_outfile
+      base_name=`basename "$file" | sed 's/\.[^.]*$//'`
+      if test -n "$out_obj"; then
+        object=$out_obj
+      elif test -n "$op_out_dir"; then
+        object="$op_out_dir/${base_name}.$obj_ext"
       else
-        outfile=`basename "$file" | sed 's/\.[^.]*$//'`
-        outfile="${outfile}.$obj_ext"
+        object="${base_name}.$obj_ext"
       fi
-      cc_obj="$cc_obj $outfile"
+
+      op_obj="$op_obj $object"
       cat <<EOF
-$outfile: $src
-	$cc_cmd $cflags $src
+$object: $src
+	$op_cmd $op_cflags $src
 EOF
     else
-      $cc_cmd $cflags $src
+      $op_cmd $op_cflags $src
     fi
   done
 fi
 
-if test x$op_compile = x; then
-  if test -z "$op_obj" && test -z "$cc_obj"; then
-    echo "$script_name: error: no input files" >&2
-    exit 1
-  fi
 
-  if test x$op_print = x1; then
-    echo "$cc_cmd $ldflags $op_obj $cc_obj"
-  elif test x$op_mk = x1; then
-    if test -z "$op_outfile"; then
-      outfile=$def_exe_out
-      ldflags="$ldflags -o $outfile"
-    fi
-    cat <<EOF
-$outfile: $op_obj $cc_obj
-	$cc_cmd $ldflags $op_obj $cc_obj
-EOF
-  else
-    $cc_cmd $ldflags $op_obj $cc_obj
-  fi
-fi
+
+
+
+
+
+# --------------------------------------------------------
+
+#case "$1" in
+#  gcc)
+#    op_type=gcc
+#    cc_cmd=gcc
+#    obj_ext=o
+#    exe_ext=
+#    def_exe_out="a.out"
+#    ;;
+#  clang)
+#    op_type=clang
+#    cc_cmd=clang
+#    obj_ext=o
+#    exe_ext=
+#    def_exe_out="a.out"
+#    ;;
+#  mingw)
+#    op_type=mingw
+#    cc_cmd=mingw
+#    obj_ext=obj
+#    exe_ext=".exe"
+#    def_exe_out="a.out.exe"
+#    ;;
+#  xlc)
+#    op_type=xlc
+#    cc_cmd=xlc
+#    obj_ext=o
+#    exe_ext=
+#    def_exe_out="a.out"
+#    ;;
+#  *)
+#    echo "$script_name: error: invalid compiler type $1" >&2
+#    exit 1
+#    ;;
+#esac
+#shift
+#
+#
+#
+#
+#if test x$op_compile = x; then
+#  if test -z "$op_obj" && test -z "$cc_obj"; then
+#    echo "$script_name: error: no input files" >&2
+#    exit 1
+#  fi
+#
+#  if test x$op_print = x1; then
+#    echo "$cc_cmd $ldflags $op_obj $cc_obj"
+#  elif test x$op_mk = x1; then
+#    if test -z "$op_outfile"; then
+#      outfile=$def_exe_out
+#      ldflags="$ldflags -o $outfile"
+#    fi
+#    cat <<EOF
+#$outfile: $op_obj $cc_obj
+#	$cc_cmd $ldflags $op_obj $cc_obj
+#EOF
+#  else
+#    $cc_cmd $ldflags $op_obj $cc_obj
+#  fi
+#fi
 

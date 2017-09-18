@@ -56,6 +56,7 @@ script_name=`basename "$0"`
 test_dir=/tmp/cppdef_$$
 version_string="0.9"
 c_ext="c"
+orig_dir=`pwd`
 
 print_help() {
 cat <<EOF
@@ -65,7 +66,6 @@ Usage: $script_name [options] <defines>...
 
 Options:
  -cmd=<cmd>            specify compiler command
- -cctype=<type>        compiler type: gcc clang mingw ticc msc
  *.h|*.H|*.hpp         header files. Other file extensions are recognized
  -inc=<list>           header files
  -v                    print version
@@ -85,8 +85,54 @@ clean_exit() {
   exit $ecode
 }
 
-op_cmd=gcc
-op_cctype=gcc
+probe_cc() {
+  check_cc_found=
+  ($op_cmd >/dev/null) 2>/dev/null
+  if test $? -ge 126; then
+    return
+  fi
+  check_cc_found=1
+
+  probe_out=/tmp/cc_probe_$$.txt
+  rm -f $probe_out
+  cc_cmd0=`echo "$op_cmd" | sed 's# [^/]*$##'`
+  ($cc_cmd0 -version >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 --version >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 -V >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 -qversion >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 -h >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 --help >>$probe_out) 2>>$probe_out
+  ($cc_cmd0 >>$probe_out) 2>>$probe_out
+
+  if grep "Texas Instruments" $probe_out | grep "Tools Copyright" >/dev/null; then
+    op_cctype=ticc
+  elif grep -i mingw $probe_out >/dev/null; then
+    op_cctype=mingw
+  elif grep -i gcc $probe_out >/dev/null && grep -i "free software foundation" $probe_out >/dev/null; then
+    op_cctype=gcc
+  elif grep -i "clang version" $probe_out >/dev/null; then
+    op_cctype=clang
+  elif grep "tcc version" $probe_out >/dev/null; then
+    op_cctype=tinyc
+  elif grep -i "Sun C" $probe_out >/dev/null; then
+    op_cctype=sunpro
+  elif grep -i "IBM XL C" $probe_out >/dev/null; then
+    op_cctype=xlc
+  elif grep -i "MIPSpro Compilers" $probe_out >/dev/null; then
+    op_cctype=mipspro
+  elif grep -i microsoft $probe_out >/dev/null; then
+    op_cctype=msc
+  elif grep -i "PGI Compilers and Tools" $probe_out >/dev/null; then
+    op_cctype=pgi
+  elif grep "SDCC" $probe_out >/dev/null; then
+    op_cctype=sdcc
+  else
+    op_cctype=cc
+  fi
+  rm -f $probe_out
+}
+
+op_cmd=
 op_inc=
 op_cflags=
 op_def=
@@ -97,10 +143,7 @@ while test $# -gt 0; do
       exit 0
       ;;
     -cmd=*)
-      op_cmd=`echo "$1" | sed 's/^[^=]*=//'`
-      ;;
-    -cctype=*)
-      op_cctype=`echo "$1" | sed 's/^[^=]*=//'`
+      op_cmd=`echo "$1" | sed 's/^[^=]*=//' | sed "s#^\(\.\.*\)/#$orig_dir/\1/#"`
       ;;
     -inc=*)
       arg=`echo "$1" | sed 's/^[^=]*=//'`
@@ -126,24 +169,24 @@ while test $# -gt 0; do
   shift
 done
 
+test -z "$op_def" && exit 0
+test -z "$op_cmd" && op_cmd=gcc
+
+probe_cc
+if test x$check_cc_found = x; then
+  echo "$script_name: compiler not found: $op_cmd" >&2
+  exit 1
+fi
+
 cpp_flag=-E
 case "$op_cctype" in
-  gcc|clang|mingw) : ;;
   ticc)
     cpp_flag=-ppl
     ;;
   msc)
     cpp_flag="/E"
     ;;
-  *)
-    echo "$script_name: error: invalid compiler type $op_cctype" >&2
-    exit 1
-    ;;
 esac
-
-if test -z "$op_def"; then
-  exit 0
-fi
 
 rm -rf $test_dir 2>/dev/null
 (mkdir $test_dir >/dev/null) 2>/dev/null
