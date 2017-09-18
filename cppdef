@@ -65,7 +65,7 @@ Read CPP defines
 Usage: $script_name [options] <defines>...
 
 Options:
- -cmd=<cmd>            specify compiler command
+ -cc=<cmd>             specify compiler command
  *.h|*.H|*.hpp         header files. Other file extensions are recognized
  -inc=<list>           header files
  -v                    print version
@@ -142,7 +142,7 @@ while test $# -gt 0; do
       print_help
       exit 0
       ;;
-    -cmd=*)
+    -cc=*)
       op_cmd=`echo "$1" | sed 's/^[^=]*=//' | sed "s#^\(\.\.*\)/#$orig_dir/\1/#"`
       ;;
     -inc=*)
