@@ -1,0 +1,58 @@
+cstem 1.0:
+  * refactored many other parts
+  * added -help-props parameter to cprobe
+  * added support of older GCC versions
+  * other fixes
+  * many fixes for Solaris
+  * different bug fixes
+  * updated detection of MinGW GCC
+  * added better support of Apple macOS and clang
+  * fixed endianess detection for gcc
+  * removed kernel property as redundant
+  * fixed detection of gcc 2.95
+  * updated compiler search command list
+  * added support of Tru64 UNIX and Compaq C/C++
+  * changed default compiler search list
+  * implemented additional reliable methods of detecting data model, bitness and endianness
+  * updated host os detection based on latest pofig
+  * added -cross parameter
+  * changed osx on macos
+  * added SCO UNIX target detection. Many minor fixes and improvements
+  * test all headers that are included in macro-test block
+  * improved data model detection for cross-compilers
+  * added detection of POSIX and SUS versions. Other improvements. Removed obsolete blocks
+  * minor fixes and improvements
+  * general revision: removed outdated/experimental/non-production level compiler ACK
+  * general revision: removed outdated/experimental/non-production level compiler LCC
+  * general revision: removed outdated/experimental/non-production level compiler Pelles C
+  * fixed compiler test procedure
+  * general revision: removed outdated/experimental/non-production level compiler Borland C/C++
+  * general revision: removed outdated/experimental/non-production level compiler Comeau C/C++
+  * general revision: removed outdated/experimental/non-production level compiler: Compaq C/C++, Digital Mars C/C++, EDG, PathScale EKOPath,
+    MetaWare C/C++, Microtec C/C++, Open64, TenDRA C/C++
+  * general revision: removed outdated/experimental/non-production level operating systems: Syllable, Tru64
+  * added detection of TI msp430. Added detection of 16-bit arch. Added support of TI compilers. Other improvements
+  * refactored compiler probing
+  * minor interface changes
+  * merged cprobe and cprobe+
+  * added parameter '-version'
+  * fixed params parsing in test mode
+  * fixed test mode: printed error about missing file
+  * minor optimizations and fixes
+  * fixed def mode
+  * fixed 'test -def' for complex expressions
+  * removed duplicating parameters. Other minor optimizations
+  * minor fixes
+  * fixed test mode. Failed for C++ when tested with namespace prefix
+  * changed testing order: moved all compile-only tests before initial LD tests
+  * fixed for Solaris shell
+  * disabled LD testing when we check only compile time properties
+  * added a base support of MSVC compiler
+  * removed support of Altium CHC and Altium MicroBlaze compilers
+  * removed CodeWarrior compiler support
+  * removed support of compilers DiabC, Dignus C/C++, GreenHill C/C++, IAR C/C++, ImageCraft C, Renesas C/C++, SN C/C++ (ProDG), VBCC, Stratus VOS C
+  * removed support of compilers Keil C166, Keil C51
+  * removed support for OS: AmigaOS, eCos, Integrity, Interix, LynxOS, MorphOS, NonStop, Nucleus RTOS, Microware OS-9, Stratus VOS, VxWorks, IBM z/OS
+  * removed support of arch: Blackfin, Epiphany, TI MSP430, SuperH, IBM z/Architecture
+  * minor optimization changes
+
