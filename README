@@ -1,0 +1,248 @@
+
+cstem - C/C++ system probe, test and automation toolkit
+
+
+Description
+===========
+
+cstem is a portable toolkit for probing and testing C/C++ system. It consist of 4 scripts: cprobe, cltest, cppdef, mkdep.
+cstem scripts can be used standalone or as part of software build systems.
+All scripts are portable and have no dependencies.
+
+
+
+Overview
+========
+
+### cprobe
+
+cprobe is a portable script that reliably probes a compiler to get the following properties:
+
+* compiler command (if not specified on command line)
+* compiler type
+* compiler version
+* C/C++ language standard
+* target OS
+* target OS version,
+* target architecture
+* target bitness
+* target endianess
+* target data model
+* POSIX support version
+* SUS support version
+* if compiler is cross-compiler
+* if compiler is C++ compiler
+
+Example:
+~~~bash
+$ cprobe
+type:               gcc
+version:            4.9.2
+command:            gcc
+C standard:         c89
+C++ standard:       cxx98
+target os:          gnulinux
+target os version:  -
+target arch:        x86_64
+bitness:            64
+endianness:         little
+data model:         lp64
+cross compiler:     false
+C++ compiler:       true
+posix version:      posix1-2008
+sus version:        susv4
+
+$ cprobe clang
+type:               clang
+version:            3.5.0
+command:            clang
+C standard:         c99
+C++ standard:       cxx98
+target os:          gnulinux
+target os version:  -
+target arch:        x86_64
+bitness:            64
+endianness:         little
+data model:         lp64
+cross compiler:     false
+C++ compiler:       true
+posix version:      posix1-2008
+sus version:        susv4
+
+$ cprobe x86_64-w64-mingw32-gcc
+type:               gcc
+version:            4.9.1
+command:            /usr/bin/x86_64-w64-mingw32-gcc
+C standard:         c89
+C++ standard:       cxx98
+target os:          windows
+target os version:  -
+target arch:        x86_64
+bitness:            64
+endianness:         little
+data model:         llp64
+cross compiler:     true
+C++ compiler:       true
+posix version:      -
+sus version:        -
+
+$ cprobe g++ -lang=c++11 -msse4 -O3 -g2 -I. -Wall
+type:               gcc
+version:            4.9.2
+command:            g++
+C standard:         c89
+C++ standard:       cxx98
+target os:          gnulinux
+target os version:  -
+target arch:        x86_64
+bitness:            64
+endianness:         little
+data model:         lp64
+cross compiler:     true
+C++ compiler:       true
+posix version:      posix1-2008
+sus version:        susv4
+
+$ cprobe -f4
+gcc:gnulinux:x86_64:gcc
+
+$ cprobe -f5
+gcc:4.9.2:c89:cxx98:gnulinux::x86_64:64::lp64:false:true:posix1-2008:susv4:gcc
+
+$ cprobe gcc -f1
+CC_CMD="gcc"
+CC_TYPE="gcc"
+CC_VERSION="4.9.2"
+CC_STD="c89"
+CC_CXX_STD="cxx98"
+CC_OS="gnulinux"
+CC_OS_VERSION=""
+CC_ARCH="x86_64"
+CC_BITNESS="64"
+CC_ENDIANNESS="little"
+CC_DATA_MODEL="lp64"
+CC_FLAG_CROSS="false"
+CC_FLAG_CXX="true"
+CC_POSIX="posix1-2008"
+CC_SUS="susv4"
+~~~
+
+--------------------------------------------------------------------------------
+
+### cltest
+
+cltest can test compiler, compiler flags, system libraries and other C/C++ system properties. If you need to check system for any C/C++ dependencies, cltest tool is what you need.
+
+Example:
+~~~bash
+$ cltest
+checking compiler gcc ... OK
+checking linker gcc ... OK
+
+$ cltest clang
+checking compiler clang ... OK
+checking linker clang ... OK
+
+$ cltest -I. -DVERSION=1.0 -UDEBUG -L. -O3 -g0
+checking compiler flags  -I. -DVERSION=1.0 -UDEBUG -O3 -g0 ... OK
+checking linker flags  -L. -O3 -g0 ... OK
+
+$ ./cltest -lxml2 -lm stdio.h stdlib.h stdarg.h
+checking header stdio.h ... OK
+checking header stdlib.h ... OK
+checking header stdarg.h ... OK
+checking libraries  -lxml2 -lm ... OK
+
+$ cltest clang "#ifdef __clang_major__" -def="__unix__ __linux__"
+checking define #ifdef __clang_major__ ... OK
+checking define __unix__ ... OK
+checking define __linux__ ... OK
+
+$ cltest "fprintf()" "atoi()" =__SIZEOF_INT__ stdio.h errno.h -var="errno sys_errlist"
+checking variable errno ... OK
+checking variable sys_errlist ... OK
+checking rval __SIZEOF_INT__ ... OK
+checking function fprintf ... OK
+checking function atoi ... OK
+
+$ cltest "xmlXPathInit() xmlListWalk() xmlAddChild()" -lxml2
+checking function xmlXPathInit ... OK
+checking function xmlListWalk ... OK
+checking function xmlAddChild ... OK
+
+$ cltest g++ -lQtGui
+checking libraries  -lQtGui ... OK
+~~~
+
+
+**cltest** can test the following properties:
+
+* compiler/linker. check if compiler/linker works
+* compiler/linker flags. check if given flags are correct for the specified or autoselected compiler
+* libraries. check if given libraries are available on a system
+* headers. check if given headers are available on a system
+* defines. test specified defines and complex macro commands
+* types. check if specified types are available
+* enum constants
+* extern variables
+* functions
+* symbols
+* rvalues
+* one line source strings
+* custom source files. Check given source files
+
+--------------------------------------------------------------------------------
+
+### cppdef
+
+cppdef is a simple tool to read CPP defines. It is very useful in 'configure' scripts to check specific compiler or system library properties. Example:
+
+~~~bash
+$ cppdef __GNUC__
+4
+$ cppdef -cc=clang __clang_major__
+3
+$ ./cppdef LIBXML_VERSION_STRING -I/usr/include/libxml2 libxml/xmlversion.h
+20901
+~~~
+
+--------------------------------------------------------------------------------
+
+### mkdep
+
+Tool to generate dependencies of C/C++ source files for Makefile. mkdep is portable and compiler-independent.
+
+Example for simple source file 'file1.c':
+~~~bash
+$ mkdep gcc -o obj/file1.o -c file1.c -I. -g0 -O3 >file.d
+$ cat file1.d
+obj/file1.o: file1.c /usr/include/stdc-predef.h /usr/include/stdio.h \
+ /usr/include/features.h /usr/include/x86_64-linux-gnu/sys/cdefs.h \
+ /usr/include/x86_64-linux-gnu/bits/wordsize.h \
+ /usr/include/x86_64-linux-gnu/gnu/stubs.h \
+ /usr/include/x86_64-linux-gnu/gnu/stubs-64.h \
+ /usr/lib/gcc/x86_64-linux-gnu/4.9/include/stddef.h \
+ /usr/include/x86_64-linux-gnu/bits/types.h \
+ /usr/include/x86_64-linux-gnu/bits/typesizes.h /usr/include/libio.h \
+ /usr/include/_G_config.h /usr/include/wchar.h \
+ /usr/lib/gcc/x86_64-linux-gnu/4.9/include/stdarg.h \
+ /usr/include/x86_64-linux-gnu/bits/stdio_lim.h \
+ /usr/include/x86_64-linux-gnu/bits/sys_errlist.h
+/usr/include/stdc-predef.h:
+/usr/include/stdio.h:
+/usr/include/features.h:
+/usr/include/x86_64-linux-gnu/sys/cdefs.h:
+/usr/include/x86_64-linux-gnu/bits/wordsize.h:
+/usr/include/x86_64-linux-gnu/gnu/stubs.h:
+/usr/include/x86_64-linux-gnu/gnu/stubs-64.h:
+/usr/lib/gcc/x86_64-linux-gnu/4.9/include/stddef.h:
+/usr/include/x86_64-linux-gnu/bits/types.h:
+/usr/include/x86_64-linux-gnu/bits/typesizes.h:
+/usr/include/libio.h:
+/usr/include/_G_config.h:
+/usr/include/wchar.h:
+/usr/lib/gcc/x86_64-linux-gnu/4.9/include/stdarg.h:
+/usr/include/x86_64-linux-gnu/bits/stdio_lim.h:
+/usr/include/x86_64-linux-gnu/bits/sys_errlist.h:
+~~~
+
