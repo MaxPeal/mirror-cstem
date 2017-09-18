@@ -56,3 +56,6 @@ cstem 1.0:
   * removed support of arch: Blackfin, Epiphany, TI MSP430, SuperH, IBM z/Architecture
   * minor optimization changes
 
+cstem 1.1:
+  * major refactoring: simpler, faster, no cross-dependencies
+
