@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# ctest
+# cltest
 #
 # Copyright (c) 2015-2017, Oleksiy Chernyavskyy
 # All rights reserved.
@@ -29,9 +29,9 @@
 # JUMP TO MODERN SHELL IF POSSIBLE
 (test_exit_code_127_sdfjsdfksjdhfksjdhf  >/dev/null) 2>/dev/null
 if test $? -ne 127; then
-  if test -z "$CTEST_BASH_REDIRECT"; then
-    CTEST_BASH_REDIRECTED=1
-    export CTEST_BASH_REDIRECTED
+  if test -z "$CLTEST_BASH_REDIRECT"; then
+    CLTEST_BASH_REDIRECTED=1
+    export CLTEST_BASH_REDIRECTED
     if test -x /bin/bash; then
       exec /bin/bash "$0" ${1+"$@"}
     elif test -x /usr/bin/bash; then
@@ -48,17 +48,17 @@ if test $? -ne 127; then
     fi
   fi
 fi
-CTEST_BASH_REDIRECTED=
-export CTEST_BASH_REDIRECTED
+CLTEST_BASH_REDIRECTED=
+export CLTEST_BASH_REDIRECTED
 ################################################################################
 
 script_name=`basename "$0"`
 orig_dir=`pwd`
 lang_mode=c
-test_dir=/tmp/ctest_$$
-tmp_buf="$test_dir/ctest_buf.txt"
+test_dir=/tmp/cltest_$$
+tmp_buf="$test_dir/cltest_buf.txt"
 version_string="0.9"
-ctest_log=$test_dir/ctest.log
+cltest_log=$test_dir/cltest.log
 c_ext="c"
 
 print_help() {
@@ -102,7 +102,7 @@ EOF
 }
 
 print_version() {
-  echo "ctest $version_string"
+  echo "cltest $version_string"
 }
 
 probe_cc() {
@@ -156,7 +156,7 @@ echo_status() {
   if test "$1" = "-l"; then
     p1=$2
     p2=$3
-    printf "\n# $p1\n" "$p2" >> $ctest_log
+    printf "\n# $p1\n" "$p2" >> $cltest_log
   else
     p1=$1
     p2=$2
@@ -175,13 +175,13 @@ clean_exit() {
     cat $tmp_buf
   fi
 
-  if test -f $ctest_log; then
+  if test -f $cltest_log; then
     if test x$op_echo_log = x1; then
       printf "\n%s\n%s\n" "LOG" "----------------------------------------" >&2
-      cat $ctest_log >&2
+      cat $cltest_log >&2
     fi
     if test -n "$op_log_file"; then
-      cat $ctest_log >> $op_log_file
+      cat $cltest_log >> $op_log_file
     fi
   fi
   cd $orig_dir
@@ -193,7 +193,7 @@ clean_exit() {
 
 
 log_title() {
-  cat <<EOF >>$ctest_log
+  cat <<EOF >>$cltest_log
 
 ################################################################################
 # $1
@@ -201,9 +201,9 @@ EOF
 }
 
 log_src() {
-  echo "****************************************">>$ctest_log
-  cat $1 | sed 's/^/* /g' >>$ctest_log
-  echo "****************************************">>$ctest_log
+  echo "****************************************">>$cltest_log
+  cat $1 | sed 's/^/* /g' >>$cltest_log
+  echo "****************************************">>$cltest_log
 }
 
 first_param=1
@@ -506,7 +506,7 @@ if test x$have_src = x1; then
           cat >>$test_src <<EOF
 $def_string
 #else
-#error ctest: false directive: $def_string
+#error cltest: false directive: $def_string
 #endif
 
 EOF
@@ -514,7 +514,7 @@ EOF
         *)
           cat >>$test_src <<EOF
 #ifndef $def_string
-#error ctest: $def_string not defined
+#error cltest: $def_string not defined
 #endif
 
 EOF
@@ -522,8 +522,8 @@ EOF
       esac
     
       log_src $test_src
-      echo "$cc_cf $test_src" >> $ctest_log
-      $cc_cf $test_src >> $ctest_log 2>&1
+      echo "$cc_cf $test_src" >> $cltest_log
+      $cc_cf $test_src >> $cltest_log 2>&1
       ret=$?
       if test $ret -ne 0; then
         echo_status "%s\n" "Failed"
@@ -550,12 +550,12 @@ EOF
       type_string=`echo "$type_string" | sed 's/^ *//' | sed 's/ *$//'`
   
       type_base=`echo "$type_string" | sed 's/\**$//'`
-      echo "$type_base *ctest_var123123;" >> $test_src
+      echo "$type_base *cltest_var123123;" >> $test_src
     
       echo_status -l "%s" "checking type $type_base ... "
       log_src $test_src
-      echo "$cc_cf $test_src" >> $ctest_log
-      $cc_cf $test_src >> $ctest_log 2>&1
+      echo "$cc_cf $test_src" >> $cltest_log
+      $cc_cf $test_src >> $cltest_log 2>&1
       ret=$?
       if test $ret -ne 0; then
         echo_status "%s\n" "Failed"
@@ -586,12 +586,12 @@ EOF
     for enum in $op_enum; do
       cat $test_src_base > $test_src
   
-      echo "int ctest_enum123123 = $enum;" >> $test_src
+      echo "int cltest_enum123123 = $enum;" >> $test_src
     
       echo_status -l "%s" "checking enum $enum ... "
       log_src $test_src
-      echo "$cc_cf $test_src" >> $ctest_log
-      $cc_cf $test_src >> $ctest_log 2>&1
+      echo "$cc_cf $test_src" >> $cltest_log
+      $cc_cf $test_src >> $cltest_log 2>&1
       ret=$?
       if test $ret -ne 0; then
         echo_status "%s\n" "Failed"
@@ -623,8 +623,8 @@ EOF
   
     echo_status -l "%s" "checking source string $op_cstr ... "
     log_src $test_src
-    echo "$cc_cf $o_obj_flag $test_obj $test_src" >> $ctest_log
-    $cc_cf $o_obj_flag $test_obj $test_src >> $ctest_log 2>&1
+    echo "$cc_cf $o_obj_flag $test_obj $test_src" >> $cltest_log
+    $cc_cf $o_obj_flag $test_obj $test_src >> $cltest_log 2>&1
     ret=$?
     if test $ret -ne 0; then
       echo_status "%s\n" "Failed"
@@ -633,16 +633,16 @@ EOF
       fi
       exit_status=$ret
     else
-      echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs" >> $ctest_log
-      $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs >> $ctest_log 2>&1
+      echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs" >> $cltest_log
+      $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs >> $cltest_log 2>&1
       ret=$?
       if test $ret -ne 0; then
         rm -f test.o*
-        echo "test again ..." >> $ctest_log
+        echo "test again ..." >> $cltest_log
         echo "int main(int argc, char *argv[]) { return 0;}" >>$test_src
         log_src $test_src
-        echo "$cc_cf $o_obj_flag $test_obj $test_src" >> $ctest_log
-        $cc_cf $o_obj_flag $test_obj $test_src >> $ctest_log 2>&1
+        echo "$cc_cf $o_obj_flag $test_obj $test_src" >> $cltest_log
+        $cc_cf $o_obj_flag $test_obj $test_src >> $cltest_log 2>&1
         ret=$?
         if test $ret -ne 0; then
           echo_status "%s\n" "Failed"
@@ -651,8 +651,8 @@ EOF
           fi
           exit_status=$ret
         else
-          echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs" >> $ctest_log
-          $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs >> $ctest_log 2>&1
+          echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs" >> $cltest_log
+          $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs >> $cltest_log 2>&1
           ret=$?
           if test $ret -ne 0; then
             echo_status "%s\n" "Failed"
@@ -679,11 +679,11 @@ EOF
   
       echo_status -l "%s" "checking variable $var ... "
     
-      echo "int main(int argc, char *argv[]) {int ctest_var = (int) $var; return 0;}" >> $test_src
+      echo "int main(int argc, char *argv[]) {int cltest_var = (int) $var; return 0;}" >> $test_src
     
       log_src $test_src
-      echo "$cc_cf $o_obj_flag $test_obj $test_src" >> $ctest_log
-      $cc_cf $o_obj_flag $test_obj $test_src >> $ctest_log 2>&1
+      echo "$cc_cf $o_obj_flag $test_obj $test_src" >> $cltest_log
+      $cc_cf $o_obj_flag $test_obj $test_src >> $cltest_log 2>&1
       ret=$?
       if test $ret -ne 0; then
         echo_status "%s\n" "Failed"
@@ -692,8 +692,8 @@ EOF
         fi
         exit_status=$ret
       else
-        echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs" >> $ctest_log
-        $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs >> $ctest_log 2>&1
+        echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs" >> $cltest_log
+        $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs >> $cltest_log 2>&1
         ret=$?
         if test $ret -ne 0; then
           echo_status "%s\n" "Failed"
@@ -725,11 +725,11 @@ EOF
       echo_status -l "%s" "checking symbol $sym ... "
     
       echo "extern void *$sym;" > $test_src
-      echo "int main(int argc, char *argv[]) {void *ctest_sym = $sym; return 0;}" >> $test_src
+      echo "int main(int argc, char *argv[]) {void *cltest_sym = $sym; return 0;}" >> $test_src
     
       log_src $test_src
-      echo "$cc_cf $o_obj_flag $test_obj $test_src" >> $ctest_log
-      $cc_cf $o_obj_flag $test_obj $test_src >> $ctest_log 2>&1
+      echo "$cc_cf $o_obj_flag $test_obj $test_src" >> $cltest_log
+      $cc_cf $o_obj_flag $test_obj $test_src >> $cltest_log 2>&1
       ret=$?
       if test $ret -ne 0; then
         echo_status "%s\n" "Failed"
@@ -738,8 +738,8 @@ EOF
         fi
         exit_status=$ret
       else
-        echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs" >> $ctest_log
-        $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs >> $ctest_log 2>&1
+        echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs" >> $cltest_log
+        $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs >> $cltest_log 2>&1
         ret=$?
         if test $ret -ne 0; then
           echo_status "%s\n" "Failed"
@@ -771,11 +771,11 @@ EOF
       echo_status -l "%s" "checking rval $var ... "
 
       cat $test_src_base > $test_src
-      echo "int main(int argc, char *argv[]) {int ctest_var = (int) $var; return 0;}" >> $test_src
+      echo "int main(int argc, char *argv[]) {int cltest_var = (int) $var; return 0;}" >> $test_src
     
       log_src $test_src
-      echo "$cc_cf $o_obj_flag $test_obj $test_src" >> $ctest_log
-      $cc_cf $o_obj_flag $test_obj $test_src >> $ctest_log 2>&1
+      echo "$cc_cf $o_obj_flag $test_obj $test_src" >> $cltest_log
+      $cc_cf $o_obj_flag $test_obj $test_src >> $cltest_log 2>&1
       ret=$?
       if test $ret -ne 0; then
         echo_status "%s\n" "Failed"
@@ -784,8 +784,8 @@ EOF
         fi
         exit_status=$ret
       else
-        echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs" >> $ctest_log
-        $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs >> $ctest_log 2>&1
+        echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs" >> $cltest_log
+        $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs >> $cltest_log 2>&1
         ret=$?
         if test $ret -ne 0; then
           echo_status "%s\n" "Failed"
@@ -819,11 +819,11 @@ EOF
       echo_status -l "%s" "checking function $func ... "
     
       echo "int $func(int);" > $test_src
-      echo "int main(int argc, char *argv[]) { int ctest_var = $func(1); return ctest_var; }" >> $test_src
+      echo "int main(int argc, char *argv[]) { int cltest_var = $func(1); return cltest_var; }" >> $test_src
     
       log_src $test_src
-      echo "$cc_cf $o_obj_flag $test_obj $test_src" >> $ctest_log
-      $cc_cf $o_obj_flag $test_obj $test_src >> $ctest_log 2>&1
+      echo "$cc_cf $o_obj_flag $test_obj $test_src" >> $cltest_log
+      $cc_cf $o_obj_flag $test_obj $test_src >> $cltest_log 2>&1
       ret=$?
       if test $ret -ne 0; then
         echo_status "%s\n" "Failed"
@@ -832,8 +832,8 @@ EOF
         fi
         exit_status=$ret
       else
-        echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs" >> $ctest_log
-        $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs >> $ctest_log 2>&1
+        echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs" >> $cltest_log
+        $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs >> $cltest_log 2>&1
         ret=$?
         if test $ret -ne 0; then
           echo_status "%s\n" "Failed"
@@ -879,8 +879,8 @@ EOF
       src_base=`basename "$src_full"`
     
       log_src $src_base
-      echo "$cc_cf $o_obj_flag $test_obj $src_base" >> $ctest_log
-      $cc_cf $o_obj_flag $test_obj $src_base >> $ctest_log 2>&1
+      echo "$cc_cf $o_obj_flag $test_obj $src_base" >> $cltest_log
+      $cc_cf $o_obj_flag $test_obj $src_base >> $cltest_log 2>&1
       ret=$?
       if test $ret -ne 0; then
         echo_status "%s\n" "Failed"
@@ -889,8 +889,8 @@ EOF
         fi
         exit_status=$ret
       else
-        echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs" >> $ctest_log
-        $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs >> $ctest_log 2>&1
+        echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs" >> $cltest_log
+        $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs >> $cltest_log 2>&1
         ret=$?
         if test $ret -ne 0; then
           echo_status "%s\n" "Failed"
@@ -919,8 +919,8 @@ elif test x$have_libs = x1; then
       echo "#include <$inc>" > $test_src
       echo "int ct_i=1;" >> $test_src
       log_src $test_src
-      echo "$cc_cf $test_src" >> $ctest_log
-      $cc_cf $test_src >> $ctest_log 2>&1
+      echo "$cc_cf $test_src" >> $cltest_log
+      $cc_cf $test_src >> $cltest_log 2>&1
       ret=$?
       if test $ret -ne 0; then
         echo_status "%s\n" "Failed"
@@ -955,11 +955,11 @@ int main(int argc, char *argv[]) {
 }
 EOF
     log_src $test_src
-    echo "$cc_cf $o_obj_flag $test_obj $test_src" >> $ctest_log
-    $cc_cf $o_obj_flag $test_obj $test_src>> $ctest_log 2>&1
+    echo "$cc_cf $o_obj_flag $test_obj $test_src" >> $cltest_log
+    $cc_cf $o_obj_flag $test_obj $test_src>> $cltest_log 2>&1
   
-    echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs" >> $ctest_log
-    $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs >> $ctest_log 2>&1
+    echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs" >> $cltest_log
+    $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $op_libs >> $cltest_log 2>&1
     ret=$?
     if test $ret -ne 0; then
       echo_status "%s\n" "Failed"
@@ -967,8 +967,8 @@ EOF
       for lib in $op_libs_rev; do
         echo_status "%s" "  $lib ... "
         libs="$lib $libs"
-        echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $libs" >> $ctest_log
-        $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $libs >> $ctest_log 2>&1
+        echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $libs" >> $cltest_log
+        $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags $libs >> $cltest_log 2>&1
         if test $? -ne 0; then
           echo_status "%s\n" "Failed"
           if test x$op_no_break = x; then
@@ -1006,8 +1006,8 @@ int main(int argc, char *argv[]) {
 }
 EOF
     log_src $test_src
-    echo "$cc_c $op_cflags $test_src" >> $ctest_log
-    $cc_c $op_cflags $test_src>> $ctest_log 2>&1
+    echo "$cc_c $op_cflags $test_src" >> $cltest_log
+    $cc_c $op_cflags $test_src>> $cltest_log 2>&1
     ret=$?
     if test $ret -ne 0; then
       echo_status "%s\n" "Failed"
@@ -1015,8 +1015,8 @@ EOF
       for flag in $op_cflags; do
        echo_status "%s" "  $flag ... "
        flags="$flags $flag"
-       echo "$cc_c $flags $test_src" >> $ctest_log
-       $cc_c $flags $test_src>> $ctest_log 2>&1
+       echo "$cc_c $flags $test_src" >> $cltest_log
+       $cc_c $flags $test_src>> $cltest_log 2>&1
        if test $? -ne 0; then
          echo_status "%s\n" "Failed"
          clean_exit $ret
@@ -1041,11 +1041,11 @@ int main(int argc, char *argv[]) {
 }
 EOF
     log_src $test_src
-    echo "$cc_cf $o_obj_flag $test_obj $test_src" >> $ctest_log
-    $cc_cf $o_obj_flag $test_obj $test_src>> $ctest_log 2>&1
+    echo "$cc_cf $o_obj_flag $test_obj $test_src" >> $cltest_log
+    $cc_cf $o_obj_flag $test_obj $test_src>> $cltest_log 2>&1
   
-    echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags" >> $ctest_log
-    $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags >> $ctest_log 2>&1
+    echo "$ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags" >> $cltest_log
+    $ld_cmd $o_exe_flag $test_exe $test_obj $op_ldflags >> $cltest_log 2>&1
     ret=$?
     if test $ret -ne 0; then
       echo_status "%s\n" "Failed"
@@ -1053,8 +1053,8 @@ EOF
       for flag in $op_ldflags; do
         echo_status "%s" "  $flag ... "
         flags="$flags $flag"
-        echo "$ld_cmd $o_exe_flag $test_exe $test_obj $flags" >> $ctest_log
-        $ld_cmd $o_exe_flag $test_exe $test_obj $flags >> $ctest_log 2>&1
+        echo "$ld_cmd $o_exe_flag $test_exe $test_obj $flags" >> $cltest_log
+        $ld_cmd $o_exe_flag $test_exe $test_obj $flags >> $cltest_log 2>&1
         if test $? -ne 0; then
           echo_status "%s\n" "Failed"
           clean_exit $ret
@@ -1082,8 +1082,8 @@ bbbbbbb
 ddddddd
 EOF
   log_src $test_src
-  echo "$cc_c $test_src" >> $ctest_log
-  $cc_c $test_src>> $ctest_log 2>&1
+  echo "$cc_c $test_src" >> $cltest_log
+  $cc_c $test_src>> $cltest_log 2>&1
   ret=$?
   if test $ret -eq 0; then
     echo_status "%s\n" "Failed"
@@ -1098,8 +1098,8 @@ int main(int argc, char *argv[]) {
 }
 EOF
   log_src $test_src
-  echo "$cc_c $test_src" >> $ctest_log
-  $cc_c $test_src>> $ctest_log 2>&1
+  echo "$cc_c $test_src" >> $cltest_log
+  $cc_c $test_src>> $cltest_log 2>&1
   ret=$?
   if test $ret -ne 0; then
     echo_status "%s\n" "Failed"
@@ -1119,11 +1119,11 @@ int main(int argc, char *argv[]) {
 }
 EOF
   log_src $test_src
-  echo "$cc_c $o_obj_flag $test_obj $test_src" >> $ctest_log
-  $cc_c $o_obj_flag $test_obj $test_src >> $ctest_log 2>&1
+  echo "$cc_c $o_obj_flag $test_obj $test_src" >> $cltest_log
+  $cc_c $o_obj_flag $test_obj $test_src >> $cltest_log 2>&1
   
-  echo "$ld_cmd $o_exe_flag $test_exe $test_obj" >> $ctest_log
-  $ld_cmd $o_exe_flag $test_exe $test_obj>> $ctest_log 2>&1
+  echo "$ld_cmd $o_exe_flag $test_exe $test_obj" >> $cltest_log
+  $ld_cmd $o_exe_flag $test_exe $test_obj>> $cltest_log 2>&1
   ret=$?
   if test $ret -ne 0 || test ! -f $test_exe; then
     echo_status "%s\n" "Failed"
