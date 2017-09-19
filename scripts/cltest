@@ -57,7 +57,6 @@ orig_dir=`pwd`
 lang_mode=c
 test_dir=/tmp/cltest_$$
 tmp_buf="$test_dir/cltest_buf.txt"
-version_string="0.9"
 cltest_log=$test_dir/cltest.log
 c_ext="c"
 
@@ -96,14 +95,18 @@ Options:
  -status=<var>         generate status variable/define VAR=1 if test passed ok
  -no-break             do not break on test fail
  -log[=<file>]         print log to stdout or to a specified file
- -v                    print version
+ -v                    display version information and exit
  ...                   unrecognized parameters are forwarded as compiler and linker flags
 EOF
 }
 
 print_version() {
-  echo "cltest $version_string"
+  cat <<EOF
+cltest 1.0
+Copyright (C) 2015-2017 Oleksii Cherniavskyi
+EOF
 }
+
 
 probe_cc() {
   check_cc_found=
@@ -388,7 +391,7 @@ while test $# -gt 0; do
     -no-break)
       op_no_break=1
       ;;
-    -v)
+    -v|--version)
       print_version
       exit 0
       ;;

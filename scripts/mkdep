@@ -52,7 +52,6 @@ MKDEP_BASH_REDIRECTED=
 export MKDEP_BASH_REDIRECTED
 ################################################################################
 
-version_string="mkdep 1.0"
 script_name=`basename "$0"`
 orig_dir=`pwd`
 
@@ -66,7 +65,10 @@ EOF
 }
 
 print_version() {
-  echo "$version_string"
+  cat <<EOF
+mkdep 1.0
+Copyright (C) 2015-2017 Oleksii Cherniavskyi
+EOF
 }
 
 probe_cc() {
@@ -151,7 +153,7 @@ while test $# -gt 0; do
       shift
       op_ofile=$1
       ;;
-    -v)
+    -v|--version)
       if test x$first_param = x1; then
         print_version
         exit 0

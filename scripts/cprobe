@@ -104,7 +104,6 @@ abs_path() {
   fi
 }
 
-version_string="1.3"
 script_name=`basename "$0"`
 orig_dir=`pwd`
 abs_path $0
@@ -148,8 +147,8 @@ Options:
  -f3       print in format VALUE
  -f4       print in format TYPE:OS:ARCH:CMD
  -f5       print in format TYPE:VER:STD:OS:OSVER:ARCH:BITS:ENDIAN:DM:CROSS:POSIX:SUS:CMD
- -hprops   print a detailed list of predefined compiler properties
- -v        print $script_name version
+ -v        display version information and exit
+ -hprops   display a detailed list of predefined compiler properties
  ...       unrecognized parameters are forwarded as compiler flags
 EOF
 }
@@ -260,7 +259,10 @@ EOF
 }
 
 print_version() {
-  echo "cprobe $version_string"
+  cat <<EOF
+cprobe 1.3
+Copyright (C) 2015-2017 Oleksii Cherniavskyi
+EOF
 }
 
 check_cc() {
@@ -1352,7 +1354,7 @@ while test $# -gt 0; do
       print_help_props
       exit 0
       ;;
-    -v)
+    -v|--version)
       print_version
       exit 0
       ;;

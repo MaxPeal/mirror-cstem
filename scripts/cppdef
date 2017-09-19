@@ -54,7 +54,6 @@ export CPPDEF_BASH_REDIRECTED
 
 script_name=`basename "$0"`
 test_dir=/tmp/cppdef_$$
-version_string="0.9"
 c_ext="c"
 orig_dir=`pwd`
 
@@ -65,17 +64,20 @@ Read CPP defines
 Usage: $script_name [options] <defines>...
 
 Options:
- -cc=<cmd>             specify compiler command
- *.h|*.H|*.hpp         header files. Other file extensions are recognized
- -inc=<list>           header files
- -v                    print version
- -*                    compiler flags
- <defines>..           preprocessor defines to read
+ -cc=<cmd>        specify compiler command
+ *.h|*.H|*.hpp    header files. Other file extensions are recognized
+ -inc=<list>      header files
+ -v               display version information and exit
+ -*               compiler flags
+ <defines>..      preprocessor defines to read
 EOF
 }
 
 print_version() {
-  echo "cppdef $version_string"
+  cat <<EOF
+cppdef 1.0
+Copyright (C) 2015-2017 Oleksii Cherniavskyi
+EOF
 }
 
 clean_exit() {
@@ -149,7 +151,7 @@ while test $# -gt 0; do
       arg=`echo "$1" | sed 's/^[^=]*=//'`
       op_inc="$op_inc $arg"
       ;;
-    -v)
+    -v|--version)
       print_version
       exit 0
       ;;
