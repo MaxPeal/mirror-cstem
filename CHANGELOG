@@ -62,3 +62,8 @@ cstem 1.1:
 cstem 1.1.1:
   * minor changes in help and version output
 
+cstem 1.2:
+  * cppdef: modified interface: added short options, added - option
+  * cltest: modified interface: added short options, added - option. Implemented backtrace on fail feature
+  * cprobe: modified interface: added short options, added - option, changed formatting options
+
