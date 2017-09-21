@@ -425,7 +425,7 @@ while test $# -gt 0; do
         op_libs_rev="$1 $op_libs_rev"
         have_libs=1
         ;;
-      -*)
+      -*|-)
         forward_next=1
         ;;
       *.c)
