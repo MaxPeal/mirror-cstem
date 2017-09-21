@@ -139,12 +139,14 @@ op_cmd=
 op_inc=
 op_cflags=
 op_def=
-forward_next=
 pass_over=
 while test $# -gt 0; do
   if test -z "$pass_over"; then
     case `echo "$1" | sed 's/^\s*//'` in
       "") : ;;
+      -)
+        pass_over=1
+        ;;
       -h|-help|--help)
         print_help
         exit 0
@@ -165,8 +167,8 @@ while test $# -gt 0; do
         print_version
         exit 0
         ;;
-      -*|-)
-        forward_next=1
+      -*)
+        op_cflags="$op_cflags $1"
         ;;
       *.h)
         op_inc="$op_inc $1"
@@ -178,24 +180,10 @@ while test $# -gt 0; do
         op_def="$op_def $1"
         ;;
     esac
-  fi
-  if test x$forward_next = x1 || test x$pass_over = x1; then
-    case `echo "$1" | sed 's/^\s*//'` in
-      "") : ;;
-      -)
-        if test -z "$pass_over"; then
-          pass_over=1
-        else
-          op_cflags="$op_cflags $1"
-        fi
-        ;;
-      *)
-        op_cflags="$op_cflags $1"
-        ;;
-    esac
+  else
+    op_cflags="$op_cflags $1"
   fi
   shift
-  forward_next=
 done
 
 test -z "$op_def" && exit 0
