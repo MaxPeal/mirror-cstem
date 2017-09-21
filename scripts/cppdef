@@ -64,18 +64,19 @@ Read CPP defines
 Usage: $script_name [options] <defines>...
 
 Options:
- -cc=<cmd>        specify compiler command
- *.h|*.H|*.hpp    header files. Other file extensions are recognized
- -inc=<list>      header files
- -v               display version information and exit
- -*               compiler flags
- <defines>..      preprocessor defines to read
+ -c, -cc=<cmd>      specify compiler command
+ *.h|*.H|*.hpp      header files. Other file extensions are recognized
+ -i, -inc=<list>    header files
+ -v                 display version information and exit
+ -*                 compiler flags
+ -                  disable interpretation of the following parameters and pass them as compiler flags
+ <defines>..        preprocessor defines to read
 EOF
 }
 
 print_version() {
   cat <<EOF
-cppdef 1.0
+cppdef 1.1
 Copyright (C) 2015-2017 Oleksii Cherniavskyi
 EOF
 }
@@ -138,37 +139,63 @@ op_cmd=
 op_inc=
 op_cflags=
 op_def=
+forward_next=
+pass_over=
 while test $# -gt 0; do
-  case "$1" in
-    -h|-help|--help)
-      print_help
-      exit 0
-      ;;
-    -cc=*)
-      op_cmd=`echo "$1" | sed 's/^[^=]*=//' | sed "s#^\(\.\.*\)/#$orig_dir/\1/#"`
-      ;;
-    -inc=*)
-      arg=`echo "$1" | sed 's/^[^=]*=//'`
-      op_inc="$op_inc $arg"
-      ;;
-    -v|--version)
-      print_version
-      exit 0
-      ;;
-    -*)
-      op_cflags="$op_cflags $1"
-      ;;
-    *.h)
-      op_inc="$op_inc $1"
-      ;;
-    *.H|*.[Hh]++|*.[Hh][Hh]|*.[Hh][Xx][Xx]|*.[Hh][Pp][Pp])
-      op_inc="$op_inc $1"
-      ;;
-    *)
-      op_def="$op_def $1"
-      ;;
-  esac
+  if test -z "$pass_over"; then
+    case `echo "$1" | sed 's/^\s*//'` in
+      "") : ;;
+      -h|-help|--help)
+        print_help
+        exit 0
+        ;;
+      -c|-cc=*)
+        test "$1" = "-c" && shift
+        arg=`echo " $1" | sed 's/^ -cc=//' | sed 's/^\s*//'`
+        if test -n "$arg"; then
+          op_cmd=`echo "$arg" | sed "s#^\(\.\.*\)/#$orig_dir/\1/#"`
+        fi
+        ;;
+      -i|-inc=*)
+        test "$1" = "-i" && shift
+        arg=`echo " $1" | sed 's/^ -inc=//' | sed 's/^\s*//'`
+        test -n "$arg" && op_inc="$op_inc $arg"
+        ;;
+      -v|--version)
+        print_version
+        exit 0
+        ;;
+      -*|-)
+        forward_next=1
+        ;;
+      *.h)
+        op_inc="$op_inc $1"
+        ;;
+      *.H|*.[Hh]++|*.[Hh][Hh]|*.[Hh][Xx][Xx]|*.[Hh][Pp][Pp])
+        op_inc="$op_inc $1"
+        ;;
+      *)
+        op_def="$op_def $1"
+        ;;
+    esac
+  fi
+  if test x$forward_next = x1 || test x$pass_over = x1; then
+    case `echo "$1" | sed 's/^\s*//'` in
+      "") : ;;
+      -)
+        if test -z "$pass_over"; then
+          pass_over=1
+        else
+          op_cflags="$op_cflags $1"
+        fi
+        ;;
+      *)
+        op_cflags="$op_cflags $1"
+        ;;
+    esac
+  fi
   shift
+  forward_next=
 done
 
 test -z "$op_def" && exit 0
