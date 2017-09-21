@@ -59,6 +59,7 @@ test_dir=/tmp/cltest_$$
 tmp_buf="$test_dir/cltest_buf.txt"
 cltest_log=$test_dir/cltest.log
 c_ext="c"
+script_cmd=`echo "$0" | sed "s#^\(\.\.*\)/#$orig_dir/\1/#"`
 
 print_help() {
 cat <<EOF
@@ -67,42 +68,43 @@ C/C++ test tool
 Usage: $script_name [cmd] [options]
 
 Options:
- cmd                   optional 1st parameter specifies compiler command
- "#if* ..."            preprocessor conditional directives
- -def=<list>           preprocessor defines
- "*() .."              library functions
- -func=<list>          library functions
- -type=<type;type;..>  types
- -enum=<list>          enum constants
- -var=<list>           extern variables
- -sym=<list>           library symbols
- =*                    rvalue (define, enum, variable)
- -rval=<list>          rvalues
- -cstr=<text>          source string
- *.c|*.C|*.cpp         source files. Other file extensions are recognized
- *.h|*.H|*.hpp         header files. Other file extensions are recognized
- -inc=<list>           header files
- -l*|lib*|*.so         dynamic libraries
- *.a                   static libraries
- -I* -D* -U*           compiler flags
- -L*                   linker flags
- -cflags=<flags>       compiler flags
- -ldflags=<flags>      linker flags
- -n                    no echo
- -f                    echo only on fail
- -out=<file>           for every subtest generate status variable and write it to a FILE
- -def-out=<file>       for every subtest generate status define and write it to a FILE
- -status=<var>         generate status variable/define VAR=1 if test passed ok
- -no-break             do not break on test fail
- -log[=<file>]         print log to stdout or to a specified file
- -v                    display version information and exit
- ...                   unrecognized parameters are forwarded as compiler and linker flags
+ cmd                    optional 1st parameter specifies compiler command
+ "#if* ..."             preprocessor conditional directives
+ -d, -def=<list>        preprocessor defines
+ "*() .."               library functions
+ -f, -func=<list>       library functions
+ -t, -type=<list>       types (space or ; separated list)
+ -e, -enum=<list>       enum constants
+ -g, -var=<list>        extern variables
+ -s, -sym=<list>        library symbols
+ =*                     rvalue (define, enum, variable)
+ -r, -rval=<list>       rvalues
+ -c, -cstr=<text>       source string
+ *.c|*.C|*.cpp          source files. Other file extensions are recognized
+ *.h|*.H|*.hpp          header files. Other file extensions are recognized
+ -i, -inc=<list>        header files
+ -l*|lib*|*.so          dynamic libraries
+ *.a                    static libraries
+ -I* -D* -U*            compiler flags
+ -L*                    linker flags
+ -cflags=<flags>        compiler flags
+ -ldflags=<flags>       linker flags
+ -n                     no echo
+ -w                     echo only on fail
+ -out=<file>            for every subtest generate status variable and write it to a FILE
+ -def-out=<file>        for every subtest generate status define and write it to a FILE
+ -status=<var>          generate status variable/define VAR=1 if test passed ok
+ -no-break              do not break on test fail
+ -log[=<file>]          print log to stdout or to a specified file
+ -v                     display version information and exit
+ -                      disable interpretation of the following parameters and pass them as compiler flags
+ ...                    unrecognized parameters are forwarded as compiler and linker flags
 EOF
 }
 
 print_version() {
   cat <<EOF
-cltest 1.0
+cltest 1.1
 Copyright (C) 2015-2017 Oleksii Cherniavskyi
 EOF
 }
@@ -174,8 +176,42 @@ echo_status() {
 clean_exit() {
   exit_status=$1
 
-  if test $exit_status != 0 && test x$op_echo_fail = x1 && test -f $tmp_buf; then
-    cat $tmp_buf
+  if test $exit_status != 0; then
+    if test x$op_echo_fail = x1 && test -f $tmp_buf; then
+      cat $tmp_buf
+    fi
+
+    if test x$CLTEST_NO_RECURSE = x && test x$op_no_echo = x || test x$op_echo_fail = x1; then
+      CLTEST_NO_RECURSE=1
+      export CLTEST_NO_RECURSE
+      rm -f $tmp_buf
+      if test -n "$have_flags$have_libs$have_src"; then
+        $script_cmd "$op_cmd" -w >$tmp_buf 2>&1
+        ret=$?
+        if test $ret = 0 && test -n "$have_libs$have_src" && test -n "$have_flags"; then
+          if test -n "$op_cflags"; then
+            $script_cmd "$op_cmd" -w -cflags="$op_cflags" >$tmp_buf 2>&1
+            ret=$?
+          fi
+          if test $ret = 0 && test -n "$op_ldflags"; then
+            $script_cmd "$op_cmd" -w -ldflags="$op_ldflags" >$tmp_buf 2>&1
+            ret=$?
+          fi
+        fi
+        if test $ret = 0 && test -n "$have_src" && test -n "$have_libs"; then
+          if test -n "$op_inc"; then
+            $script_cmd "$op_cmd" -w -inc="$op_inc" -cflags="$op_cflags" -ldflags="$op_ldflags" >$tmp_buf 2>&1
+          fi
+          if test $ret = 0 && test -n "$op_libs"; then
+            $script_cmd "$op_cmd" -w $op_libs -cflags="$op_cflags" -ldflags="$op_ldflags" >$tmp_buf 2>&1
+          fi
+        fi
+      fi
+      if test -f $tmp_buf; then
+        cat $tmp_buf | sed 's/^/  /'
+        rm -f $tmp_buf
+      fi
+    fi
   fi
 
   if test -f $cltest_log; then
@@ -237,180 +273,224 @@ op_log_file=
 have_src=
 have_libs=
 have_flags=
+forward_next=
+pass_over=
 
 while test $# -gt 0; do
-  case "$1" in
-    -h|-help|--help)
-      print_help
-      exit 0
-      ;;
-    \#if*)
-      eval def$def_num=\$1
-      def_num=`expr $def_num + 1`
-      have_src=1
-      ;;
-    -def=*)
-      def_str=`echo "$1" | sed 's/^[^=]*=//' | sed 's/^ *//'`
-      case "$def_str" in
-        '#'*)
-          eval def$def_num=\$def_str
-          def_num=`expr $def_num + 1`
-          ;;
-        *)
-          for def_name in $def_str; do
-            eval def$def_num=\$def_name
-            def_num=`expr $def_num + 1`
+  if test -z "$pass_over"; then
+    case `echo "$1" | sed 's/^\s*//'` in
+      "") : ;;
+      -h|-help|--help)
+        print_help
+        exit 0
+        ;;
+      \#if*)
+        eval def$def_num=\$1
+        def_num=`expr $def_num + 1`
+        have_src=1
+        ;;
+      -d|-def=*)
+        test "$1" = "-d" && shift
+        def_str=`echo " $1" | sed 's/^ -def=//' | sed 's/^\s*//'`
+        if test -n "$def_str"; then
+          case "$def_str" in
+            '#'*)
+              eval def$def_num=\$def_str
+              def_num=`expr $def_num + 1`
+              ;;
+            *)
+              for def_name in $def_str; do
+                eval def$def_num=\$def_name
+                def_num=`expr $def_num + 1`
+              done
+              ;;
+          esac
+          have_src=1
+        fi
+        ;;
+      -t|-type=*)
+        test "$1" = "-t" && shift
+        types=$1
+        echo "$types" | grep ";" > /dev/null || types=`echo "$types" | sed 's/  */;/g'`
+        types=`echo ";$types" | sed 's/^;-type=//' | sed 's/^;*//' | sed 's/;*$//' | sed 's/;;*/;/g'`
+        if test -n "$types"; then
+          IFS_save=$IFS
+          IFS=';'
+          for type_str in $types; do
+            eval type$type_num=\$type_str
+            type_num=`expr $type_num + 1`
           done
-          ;;
-      esac
-      have_src=1
-      ;;
-    *"()"*)
-      op_func=`echo "$op_func $1" | sed 's/( *)/ /g'`
-      have_src=1
-      ;;
-    -func=*)
-      funcs=`echo "$1" | sed 's/^[^=]*=//' | sed 's/( *)/ /g'`
-      op_func="$op_func $funcs"
-      have_src=1
-      ;;
-    -type=*)
-      types=`echo "$1" | sed 's/^[^=]*=//'`
-      IFS_save=$IFS
-      IFS=';'
-      for type_str in $types; do
-        eval type$type_num=\$type_str
-        type_num=`expr $type_num + 1`
-      done
-      IFS=$IFS_save
-      have_src=1
-      ;;
-    -enum=*)
-      arg=`echo "$1" | sed 's/^[^=]*=//'`
-      op_enum="$op_enum $arg"
-      have_src=1
-      ;;
-    -var=*)
-      arg=`echo "$1" | sed 's/^[^=]*=//'`
-      op_var="$op_var $arg"
-      have_src=1
-      ;;
-    -sym=*)
-      arg=`echo "$1" | sed 's/^[^=]*=//'`
-      op_sym="$op_sym $arg"
-      have_src=1
-      ;;
-    =*)
-      arg=`echo "$1" | sed 's/=*//'`
-      op_rval="$op_rval $arg"
-      have_src=1
-      ;;
-    -rval=*)
-      arg=`echo "$1" | sed 's/^[^=]*=//'`
-      op_rval="$op_rval $arg"
-      have_src=1
-      ;;
-    -cstr=*)
-      op_cstr=`echo "$1" | sed 's/^[^=]*=//'`
-      have_src=1
-      ;;
-    *.c)
-      op_src="$op_src $1"
-      have_src=1
-      ;;
-    *.C|*.[Cc][Cc]|*.[Cc][Pp][Pp]|*.[Cc][Xx][Xx]|*.[Cc]++)
-      op_src="$op_src $1"
-      lang_mode=c++
-      have_src=1
-      ;;
-    *.h)
-      op_inc="$op_inc $1"
-      have_libs=1
-      ;;
-    *.H|*.[Hh]++|*.[Hh][Hh]|*.[Hh][Xx][Xx]|*.[Hh][Pp][Pp])
-      op_inc="$op_inc $1"
-      lang_mode=c++
-      have_libs=1
-      ;;
-    -inc=*)
-      arg=`echo "$1" | sed 's/^[^=]*=//'`
-      op_inc="$op_inc $arg"
-      have_libs=1
-      ;;
-    -log)
-      op_echo_log=1
-      ;;
-    -log=*)
-      op_log_file=`echo "$1" | sed 's/^[^=]*=//'`
-      ;;
-    -l*)
-      op_libs="$op_libs $1"
-      op_libs_rev="$1 $op_libs_rev"
-      have_libs=1
-      ;;
-    lib*|*.so|*.so.*|*.a)
-      op_libs="$op_libs $1"
-      op_libs_rev="$1 $op_libs_rev"
-      have_libs=1
-      ;;
-    -[IDU]*)
-      op_cflags="$op_cflags $1"
-      have_flags=1
-      ;;
-    -L*)
-      op_ldflags="$op_ldflags $1"
-      have_flags=1
-      ;;
-    -cflags=*)
-      arg=`echo "$1" | sed 's/^[^=]*=//'`
-      op_cflags="$op_cflags $arg"
-      have_flags=1
-      ;;
-    -ldflags=*)
-      arg=`echo "$1" | sed 's/^[^=]*=//'`
-      op_ldflags="$op_ldflags $arg"
-      have_flags=1
-      ;;
-    -n)
-      op_no_echo=1
-      op_echo_fail=
-      ;;
-    -f)
-      op_echo_fail=1
-      op_no_echo=1
-      ;;
-    -out=*)
-      op_out=`echo "$1" | sed 's/^[^=]*=//'`
-      ;;
-    -def-out=*)
-      op_def_out=`echo "$1" | sed 's/^[^=]*=//'`
-      ;;
-    -status=*)
-      op_status_id=`echo "$1" | sed 's/^[^=]*=//' | sed 's/[^a-zA-Z0-9_]//g'`
-      ;;
-    -no-break)
-      op_no_break=1
-      ;;
-    -v|--version)
-      print_version
-      exit 0
-      ;;
-    -*)
-      op_cflags="$op_cflags $1"
-      op_ldflags="$op_ldflags $1"
-      have_flags=1
-      ;;
-    *)
-      if test x$first_param = x1; then
-        op_cmd=`echo "$1" | sed "s#^\(\.\.*\)/#$orig_dir/\1/#"`
-      else
-        printf "%s\n" "$script_name: invalid parameter $1" >&2
-        exit 1
-      fi
-      ;;
-  esac
+          IFS=$IFS_save
+          have_src=1
+        fi
+        ;;
+      -e|-enum=*)
+        test "$1" = "-e" && shift
+        arg=`echo " $1" | sed 's/^ -enum=//' | sed 's/^\s*//'`
+        if test -n "$arg"; then
+          op_enum="$op_enum $arg"
+          have_src=1
+        fi
+        ;;
+      -g|-var=*)
+        test "$1" = "-g" && shift
+        arg=`echo " $1" | sed 's/^ -var=//' | sed 's/^\s*//'`
+        if test -n "$arg"; then
+          op_var="$op_var $arg"
+          have_src=1
+        fi
+        ;;
+      -s|-sym=*)
+        test "$1" = "-s" && shift
+        arg=`echo " $1" | sed 's/^ -sym=//' | sed 's/^\s*//'`
+        if test -n "$arg"; then
+          op_sym="$op_sym $arg"
+          have_src=1
+        fi
+        ;;
+      -r|=*|-rval=*)
+        test "$1" = "-r" && shift
+        arg=`echo " $1" | sed 's/^ [^=]*=//' | sed 's/^\s*//'`
+        if test -n "$arg"; then
+          op_rval="$op_rval $arg"
+          have_src=1
+        fi
+        ;;
+      -c|-cstr=*)
+        test "$1" = "-c" && shift
+        arg=`echo " $1" | sed 's/^ -cstr=//' | sed 's/^\s*//'`
+        if test -n "$arg"; then
+          op_cstr=$arg
+          have_src=1
+        fi
+        ;;
+      -i|-inc=*)
+        test "$1" = "-i" && shift
+        arg=`echo " $1" | sed 's/^ -inc=//' | sed 's/^\s*//'`
+        if test -n "$arg"; then
+          op_inc="$op_inc $arg"
+          have_libs=1
+        fi
+        ;;
+      -log)
+        op_echo_log=1
+        ;;
+      -log=*)
+        op_log_file=`echo "$1" | sed 's/^[^=]*=//'`
+        ;;
+      -ldflags=*)
+        arg=`echo "$1" | sed 's/^[^=]*=//'`
+        op_ldflags="$op_ldflags $arg"
+        have_flags=1
+        ;;
+      -cflags=*)
+        arg=`echo "$1" | sed 's/^[^=]*=//'`
+        op_cflags="$op_cflags $arg"
+        have_flags=1
+        ;;
+      -n)
+        op_no_echo=1
+        op_echo_fail=
+        ;;
+      -w)
+        op_echo_fail=1
+        op_no_echo=1
+        ;;
+      -out=*)
+        op_out=`echo "$1" | sed 's/^[^=]*=//'`
+        ;;
+      -def-out=*)
+        op_def_out=`echo "$1" | sed 's/^[^=]*=//'`
+        ;;
+      -status=*)
+        op_status_id=`echo "$1" | sed 's/^[^=]*=//' | sed 's/[^a-zA-Z0-9_]//g'`
+        ;;
+      -no-break)
+        op_no_break=1
+        ;;
+      -v|--version)
+        print_version
+        exit 0
+        ;;
+      [a-zA-Z_]*"("*|-f|-func=*)
+        test "$1" = "-f" && shift
+        funcs=`echo " $1" | sed 's/^ -func=//' | sed 's/([^()]*/(/g' | sed 's/(\s*)/ /g' | sed 's/([^()]*)/ /g' | sed 's/^\s*//'`
+        if test -n "$funcs"; then
+          op_func="$op_func $funcs"
+          have_src=1
+        fi
+        ;;
+      -l*)
+        op_libs="$op_libs $1"
+        op_libs_rev="$1 $op_libs_rev"
+        have_libs=1
+        ;;
+      -*)
+        forward_next=1
+        ;;
+      *.c)
+        op_src="$op_src $1"
+        have_src=1
+        ;;
+      *.C|*.[Cc][Cc]|*.[Cc][Pp][Pp]|*.[Cc][Xx][Xx]|*.[Cc]++)
+        op_src="$op_src $1"
+        lang_mode=c++
+        have_src=1
+        ;;
+      *.h)
+        op_inc="$op_inc $1"
+        have_libs=1
+        ;;
+      *.H|*.[Hh]++|*.[Hh][Hh]|*.[Hh][Xx][Xx]|*.[Hh][Pp][Pp])
+        op_inc="$op_inc $1"
+        lang_mode=c++
+        have_libs=1
+        ;;
+      lib*|*.so|*.so.*|*.a)
+        op_libs="$op_libs $1"
+        op_libs_rev="$1 $op_libs_rev"
+        have_libs=1
+        ;;
+      *)
+        if test x$first_param = x1; then
+          op_cmd=`echo "$1" | sed "s#^\(\.\.*\)/#$orig_dir/\1/#"`
+        else
+          printf "%s\n" "$script_name: invalid parameter $1" >&2
+          exit 1
+        fi
+        ;;
+    esac
+  fi
+  if test x$forward_next = x1 || test x$pass_over = x1; then
+    case `echo "$1" | sed 's/^\s*//'` in
+      "") : ;;
+      -)
+        if test -z "$pass_over"; then
+          pass_over=1
+        else
+          op_cflags="$op_cflags $1"
+          op_ldflags="$op_ldflags $1"
+          have_flags=1
+        fi
+        ;;
+      -[IDU]*)
+        op_cflags="$op_cflags $1"
+        have_flags=1
+        ;;
+      -L*)
+        op_ldflags="$op_ldflags $1"
+        have_flags=1
+        ;;
+      *)
+        op_cflags="$op_cflags $1"
+        op_ldflags="$op_ldflags $1"
+        have_flags=1
+        ;;
+    esac
+  fi
   shift
   first_param=
+  forward_next=
 done
 
 if test -n "$op_log_file"; then
